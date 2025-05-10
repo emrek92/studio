@@ -1,12 +1,12 @@
 
 "use client";
 
-import type { CustomerOrder, OrderStatus } from "@/types";
+import type { CustomerOrder } from "@/types"; // OrderStatus removed
 import { useStore, getProductNameById, getProductCodeById, getProductUnitById } from "@/lib/store";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+// Badge removed as status is removed
 import { Edit, Trash2, MoreHorizontal, PackageOpen } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,29 +29,10 @@ interface CustomerOrderColumnsProps {
   onDelete: (orderId: string) => void;
 }
 
-const orderStatusLabels: Record<OrderStatus, string> = {
-  pending: "Beklemede",
-  processing: "İşleniyor",
-  shipped: "Gönderildi",
-  delivered: "Teslim Edildi",
-  cancelled: "İptal Edildi",
-};
-
-const orderStatusColors: Record<OrderStatus, string> = {
-    pending: "bg-yellow-500/20 text-yellow-700 border-yellow-500/50",
-    processing: "bg-blue-500/20 text-blue-700 border-blue-500/50",
-    shipped: "bg-purple-500/20 text-purple-700 border-purple-500/50",
-    delivered: "bg-green-500/20 text-green-700 border-green-500/50",
-    cancelled: "bg-red-500/20 text-red-700 border-red-500/50",
-};
-
+// orderStatusLabels and orderStatusColors removed
 
 export const getCustomerOrderColumns = ({ onEdit, onDelete }: CustomerOrderColumnsProps) => [
-  {
-    accessorKey: "orderReference",
-    header: "Sipariş Ref.",
-    cell: ({ row }: { row: CustomerOrder }) => <div className="font-mono font-medium">{row.orderReference}</div>,
-  },
+  // orderReference column removed
   {
     accessorKey: "customerName",
     header: "Müşteri Adı",
@@ -73,7 +54,7 @@ export const getCustomerOrderColumns = ({ onEdit, onDelete }: CustomerOrderColum
             <TooltipTrigger asChild>
               <div className="flex items-center gap-1 cursor-default">
                 <PackageOpen className="h-4 w-4 text-muted-foreground" /> 
-                {itemCount} çeşit
+                {itemCount} çeşit ürün
               </div>
             </TooltipTrigger>
             <TooltipContent className="max-w-md whitespace-pre-line text-sm bg-popover text-popover-foreground p-3 rounded-md shadow-lg border">
@@ -87,7 +68,8 @@ export const getCustomerOrderColumns = ({ onEdit, onDelete }: CustomerOrderColum
                     {productCode && <span className="font-mono bg-muted text-muted-foreground px-1 py-0.5 rounded text-[10px]">{productCode}</span>}
                     <span className={cn("font-medium", productCode ? "ml-1" : "")}>{productName}</span>
                     <div className="text-muted-foreground">
-                        Miktar: {item.quantity} {productUnit || ''} &nbsp;|&nbsp; Birim Fiyat: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(item.unitPrice)}
+                        Miktar: {item.quantity} {productUnit || ''}
+                        {/* Unit price removed */}
                     </div>
                   </div>
                 )
@@ -98,24 +80,8 @@ export const getCustomerOrderColumns = ({ onEdit, onDelete }: CustomerOrderColum
       );
     },
   },
-  {
-    accessorKey: "totalAmount",
-    header: () => <div className="text-right">Toplam Tutar</div>,
-    cell: ({ row }: { row: CustomerOrder }) => (
-      <div className="text-right font-semibold">
-        {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(row.totalAmount)}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "status",
-    header: "Durum",
-    cell: ({ row }: { row: CustomerOrder }) => (
-      <Badge className={cn("font-medium", orderStatusColors[row.status])} variant="outline">
-        {orderStatusLabels[row.status]}
-      </Badge>
-    ),
-  },
+  // totalAmount column removed
+  // status column removed
   {
     id: "actions",
     header: "İşlemler",
@@ -143,3 +109,4 @@ export const getCustomerOrderColumns = ({ onEdit, onDelete }: CustomerOrderColum
     },
   },
 ];
+

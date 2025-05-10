@@ -22,11 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+// Textarea removed as notes are removed
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useStore, getProductUnitById } from "@/lib/store";
-import type { CustomerOrder, OrderItem, OrderStatus, Product } from "@/types";
+import { useStore, getProductUnitById, getProductCodeById, getProductNameById } from "@/lib/store";
+import type { CustomerOrder, OrderItem, Product } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
 import { format } from "date-fns";
@@ -38,29 +38,21 @@ import { Separator } from "@/components/ui/separator";
 const orderItemSchema = z.object({
   productId: z.string().min(1, "Ürün seçilmelidir."),
   quantity: z.coerce.number().positive("Miktar pozitif bir sayı olmalıdır."),
-  unitPrice: z.coerce.number().nonnegative("Birim fiyat negatif olamaz."),
+  // unitPrice removed
 });
 
 const customerOrderFormSchema = z.object({
-  orderReference: z.string().min(1, "Sipariş referansı zorunludur."),
+  // orderReference removed
   customerName: z.string().min(2, "Müşteri adı en az 2 karakter olmalıdır."),
   orderDate: z.date({ required_error: "Sipariş tarihi seçilmelidir." }),
-  status: z.enum(["pending", "processing", "shipped", "delivered", "cancelled"], {
-    required_error: "Sipariş durumu seçilmelidir.",
-  }),
+  // status removed
   items: z.array(orderItemSchema).min(1, "Sipariş en az bir ürün içermelidir."),
-  notes: z.string().optional(),
+  // notes removed
 });
 
 type CustomerOrderFormValues = z.infer<typeof customerOrderFormSchema>;
 
-const orderStatusOptions: { value: OrderStatus; label: string }[] = [
-  { value: "pending", label: "Beklemede" },
-  { value: "processing", label: "İşleniyor" },
-  { value: "shipped", label: "Gönderildi" },
-  { value: "delivered", label: "Teslim Edildi" },
-  { value: "cancelled", label: "İptal Edildi" },
-];
+// orderStatusOptions removed
 
 interface CustomerOrderFormProps {
   order?: CustomerOrder; 
@@ -68,7 +60,7 @@ interface CustomerOrderFormProps {
 }
 
 export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) {
-  const { products, addCustomerOrder, updateCustomerOrder, customerOrders } = useStore();
+  const { products, addCustomerOrder, updateCustomerOrder } = useStore(); // customerOrders removed as not needed for direct form logic
   const { toast } = useToast();
 
   const finishedProducts = products.filter(p => p.type === 'mamul');
@@ -76,14 +68,14 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
   const form = useForm<CustomerOrderFormValues>({
     resolver: zodResolver(customerOrderFormSchema),
     defaultValues: order 
-      ? { ...order, orderDate: new Date(order.orderDate), notes: order.notes || "" }
+      ? { ...order, orderDate: new Date(order.orderDate) } // removed notes, status, orderReference
       : {
-          orderReference: "",
+          // orderReference: "", // removed
           customerName: "",
           orderDate: new Date(),
-          status: "pending",
-          items: [{ productId: "", quantity: 1, unitPrice: 0 }],
-          notes: "",
+          // status: "pending", // removed
+          items: [{ productId: "", quantity: 1 }], // removed unitPrice
+          // notes: "", // removed
         },
   });
 
@@ -92,40 +84,25 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
     name: "items",
   });
 
-  const watchedItems = form.watch("items");
-  const totalAmount = React.useMemo(() => {
-    return watchedItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-  }, [watchedItems]);
+  // watchedItems and totalAmount removed as unitPrice is gone
 
   function onSubmit(data: CustomerOrderFormValues) {
     try {
-      const orderDataWithDetails = {
+      const orderDataSubmit = {
         ...data,
         orderDate: data.orderDate.toISOString(),
-        notes: data.notes || undefined,
-        totalAmount: totalAmount,
+        // notes, totalAmount, status removed
       };
       
       if (order) {
-         // Check if orderReference is being changed to one that already exists (excluding current order)
-        if (data.orderReference !== order.orderReference) {
-            const existingOrderWithNewRef = customerOrders.find(co => co.id !== order.id && co.orderReference.toLowerCase() === data.orderReference.toLowerCase());
-            if (existingOrderWithNewRef) {
-                form.setError("orderReference", { type: "manual", message: "Bu sipariş referansı zaten başka bir sipariş için kullanılıyor." });
-                return;
-            }
-        }
-        updateCustomerOrder({ ...order, ...orderDataWithDetails });
+        updateCustomerOrder({ ...order, ...orderDataSubmit });
         toast({ title: "Müşteri Siparişi Güncellendi", description: `Sipariş başarıyla güncellendi.` });
       } else {
-        const existingOrder = customerOrders.find(co => co.orderReference.toLowerCase() === data.orderReference.toLowerCase());
-        if (existingOrder) {
-            form.setError("orderReference", { type: "manual", message: "Bu sipariş referansı zaten kullanılıyor." });
-            return;
-        }
+        // No orderReference uniqueness check as it's removed.
+        // If needed, a similar check could be for customerName + orderDate combination.
         const newOrder: CustomerOrder = {
           id: crypto.randomUUID(),
-          ...orderDataWithDetails,
+          ...orderDataSubmit,
         };
         addCustomerOrder(newOrder); 
         toast({ title: "Müşteri Siparişi Eklendi", description: `Yeni sipariş başarıyla eklendi.` });
@@ -143,24 +120,12 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
         <DialogHeader>
           <DialogTitle>{order ? "Müşteri Siparişini Düzenle" : "Yeni Müşteri Siparişi"}</DialogTitle>
           <DialogDescription>
-            {order ? `${order.orderReference} referanslı siparişin bilgilerini değiştirin.` : "Yeni müşteri siparişi için bilgileri girin."}
+            {order ? `${order.customerName} adına olan siparişin bilgilerini değiştirin.` : "Yeni müşteri siparişi için bilgileri girin."}
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-            control={form.control}
-            name="orderReference"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel>Sipariş Referansı</FormLabel>
-                <FormControl>
-                    <Input placeholder="Örn: SIP-2024-001" {...field} />
-                </FormControl>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
+            {/* orderReference field removed */}
             <FormField
             control={form.control}
             name="customerName"
@@ -174,9 +139,6 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
                 </FormItem>
             )}
             />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
             name="orderDate"
@@ -217,31 +179,9 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
                 </FormItem>
             )}
             />
-            <FormField
-            control={form.control}
-            name="status"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel>Sipariş Durumu</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Durum seçin" />
-                    </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                    {orderStatusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                        {option.label}
-                        </SelectItem>
-                    ))}
-                    </SelectContent>
-                </Select>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
         </div>
+        
+        {/* status field removed */}
         
         <div>
             <div className="flex justify-between items-center mb-2">
@@ -250,7 +190,7 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ productId: "", quantity: 1, unitPrice: 0 })}
+                    onClick={() => append({ productId: "", quantity: 1 })} // removed unitPrice
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Kalem Ekle
                 </Button>
@@ -258,7 +198,7 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
 
           {fields.map((field, index) => (
             <div key={field.id} className="mt-2 space-y-2 p-3 border rounded-md relative bg-muted/30 mb-3">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4"> {/* Changed from 3 to 2 cols */}
                 <FormField
                   control={form.control}
                   name={`items.${index}.productId`}
@@ -299,19 +239,7 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name={`items.${index}.unitPrice`}
-                  render={({ field: itemField }) => (
-                    <FormItem>
-                      <FormLabel>Birim Fiyat (₺)</FormLabel>
-                      <FormControl>
-                        <Input type="number" placeholder="0.00" step="0.01" {...itemField} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* unitPrice field removed */}
               </div>
               {fields.length > 1 && (
                  <Button
@@ -333,23 +261,8 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
         
         <Separator />
 
-        <FormField
-          control={form.control}
-          name="notes"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Sipariş Notları (İsteğe Bağlı)</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Sipariş hakkında ek bilgi veya notlar" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        
-        <div className="text-right font-semibold text-lg">
-            Toplam Tutar: {new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(totalAmount)}
-        </div>
+        {/* notes field removed */}
+        {/* totalAmount display removed */}
 
         <DialogFooter>
           <DialogClose asChild>
@@ -361,3 +274,4 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
     </Form>
   );
 }
+

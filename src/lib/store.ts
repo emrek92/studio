@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem, OrderStatus } from '@/types';
+import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem } from '@/types'; // OrderStatus removed
 
 interface AppState {
   products: Product[];
@@ -287,12 +287,8 @@ export const useStore = create<AppState>()(
 
       // Customer Order Actions
       addCustomerOrder: (order) => {
-        // For now, orders do not directly impact stock. This could be a future enhancement.
-        // Consider if orderReference should be unique.
-        const existingOrder = get().customerOrders.find(co => co.orderReference.toLowerCase() === order.orderReference.toLowerCase());
-        if (existingOrder) {
-            throw new Error(`'${order.orderReference}' referans numaralı sipariş zaten mevcut.`);
-        }
+        // No uniqueness check for orderReference as it's removed.
+        // Stocks are not affected by customer orders in this version.
         set((state) => ({ customerOrders: [...state.customerOrders, order] }));
       },
       updateCustomerOrder: (updatedOrder) =>
@@ -334,3 +330,4 @@ export const getProductUnitById = (productId: string): string | undefined => {
     const product = useStore.getState().products.find(p => p.id === productId);
     return product?.unit;
 }
+

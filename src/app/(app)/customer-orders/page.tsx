@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { CustomerOrderForm } from "./components/CustomerOrderForm";
 import { getCustomerOrderColumns } from "./components/CustomerOrderColumns";
-import { useStore, getProductDisplayInfoById } from "@/lib/store";
+import { useStore, getProductDisplayInfoById, getProductNameById } from "@/lib/store"; // getProductDisplayInfoById might not be needed if description is derived
 import type { CustomerOrder, OrderItem, Product } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud, CalendarIcon, XCircle } from "lucide-react";
@@ -92,21 +92,20 @@ export default function CustomerOrdersPage() {
   }, [customerOrders, dateRange]);
 
   const generateCustomerOrderTemplate = () => {
-    const headers = ["Sipariş Referansı*", "Müşteri Adı*", "Sipariş Tarihi (GG.AA.YYYY)*", "Ürün Kodu*", "Miktar*", "Birim Fiyat*", "Durum (pending, processing, shipped, delivered, cancelled)*", "Notlar"];
+    const headers = ["Müşteri Adı*", "Sipariş Tarihi (GG.AA.YYYY)*", "Ürün Kodu*", "Ürün Adı (Bilgi)", "Miktar*"];
     const exampleRows = [
-        ["SIP-001", "Ahmet Yılmaz", "01.05.2024", "MAM-001", 10, 25.50, "pending", "Acil sevkiyat"],
-        ["SIP-001", "Ahmet Yılmaz", "01.05.2024", "MAM-002", 5, 100.00, "pending", "Acil sevkiyat"],
-        ["SIP-002", "Ayşe Kaya", "02.05.2024", "MAM-003", 20, 15.00, "processing", ""],
+        ["Ahmet Yılmaz", "01.05.2024", "MAM-001", "Kırmızı Boyalı Kutu", 10],
+        ["Ahmet Yılmaz", "01.05.2024", "MAM-002", "Mavi Çanta", 5],
+        ["Ayşe Kaya", "02.05.2024", "MAM-003", "Yeşil Kalem", 20],
     ];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Sipariş Referansı' aynı siparişe ait farklı ürünleri gruplamak için kullanılır. Sistemde benzersiz olmalıdır."],
         ["- 'Ürün Kodu' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
-        ["- 'Miktar' ve 'Birim Fiyat' pozitif sayılar olmalıdır."],
+        ["- 'Ürün Adı (Bilgi)' sadece bilgilendirme amaçlıdır, içe aktarımda ürün kodu esas alınır."],
+        ["- 'Miktar' pozitif bir sayı olmalıdır."],
         ["- 'Sipariş Tarihi' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
-        ["- 'Durum' şu değerlerden biri olmalıdır: pending, processing, shipped, delivered, cancelled."],
-        ["- Aynı 'Sipariş Referansı'na sahip satırlar tek bir sipariş olarak içe aktarılacaktır."]
+        ["- Aynı 'Müşteri Adı' ve 'Sipariş Tarihi'ne sahip satırlar tek bir sipariş olarak içe aktarılacaktır."]
     ];
     downloadExcelTemplate([{ sheetName: "MusteriSiparisleri", data: [headers, ...exampleRows, [], ...notes] }], "Musteri_Siparisi_Sablonu");
   };
@@ -125,24 +124,19 @@ export default function CustomerOrdersPage() {
       let errorCount = 0;
       const errorMessages: string[] = [];
       const allProducts = useStore.getState().products;
-      const existingOrders = useStore.getState().customerOrders;
+      // existingOrders removed as we are not checking for orderReference uniqueness anymore in this simplified version.
+      // Instead, orders are grouped by CustomerName + OrderDate from the file.
 
-      const orderItemSchema = z.object({
-        "Ürün Kodu*": z.string().min(1, "Ürün kodu zorunludur."),
-        "Miktar*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
-        "Birim Fiyat*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Birim fiyat sayı olmalıdır."}).positive("Birim fiyat pozitif olmalıdır.")),
-      });
-      
       const orderRowSchema = z.object({
-        "Sipariş Referansı*": z.string().min(1, "Sipariş referansı zorunludur."),
         "Müşteri Adı*": z.string().min(1, "Müşteri adı zorunludur."),
         "Sipariş Tarihi (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir sipariş tarihi girilmelidir (GG.AA.YYYY)."}) }),
-        "Durum (pending, processing, shipped, delivered, cancelled)*": z.enum(["pending", "processing", "shipped", "delivered", "cancelled"], {errorMap: () => ({message: "Geçersiz sipariş durumu."})}),
-        "Notlar": z.string().optional().nullable(),
-      }).merge(orderItemSchema);
+        "Ürün Kodu*": z.string().min(1, "Ürün kodu zorunludur."),
+        "Miktar*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
+        // "Ürün Adı (Bilgi)" is not part of schema as it's for info only
+      });
 
 
-      const ordersFromFile = new Map<string, Partial<CustomerOrder> & { items: OrderItem[] }>();
+      const ordersFromFile = new Map<string, { customerName: string; orderDate: string; items: OrderItem[] }>();
 
       for (let i = 0; i < sheet.length; i++) {
         const row = sheet[i];
@@ -156,7 +150,11 @@ export default function CustomerOrdersPage() {
         }
         
         const data = validation.data;
-        const orderRef = data["Sipariş Referansı*"];
+        const customerName = data["Müşteri Adı*"].trim();
+        const orderDate = data["Sipariş Tarihi (GG.AA.YYYY)*"];
+        const orderDateString = format(orderDate, "yyyy-MM-dd"); // Consistent key format
+        
+        const orderKey = `${customerName}#${orderDateString}`;
 
         const product = findProductByCode(data["Ürün Kodu*"], allProducts);
         if (!product || product.type !== 'mamul') {
@@ -165,73 +163,52 @@ export default function CustomerOrdersPage() {
           continue;
         }
 
-        if (!ordersFromFile.has(orderRef)) {
-          if (existingOrders.some(eo => eo.orderReference.toLowerCase() === orderRef.toLowerCase())) {
-            errorMessages.push(`Satır ${rowIndex}: '${orderRef}' referanslı sipariş sistemde zaten mevcut. Bu referans için içe aktarma atlanacak.`);
-            errorCount++; 
-            // To skip all subsequent items for this orderRef if it already exists.
-            // A bit tricky here, as we'd need to know all orderRefs that cause this to skip them fully.
-            // For now, this error will appear for the first row of an existing orderRef encountered.
-            // A better way is to mark orderRef as "to_be_skipped" and check this mark for subsequent rows.
-            // Let's assume for now the file should contain only new orders.
-            continue;
-          }
-          ordersFromFile.set(orderRef, {
-            orderReference: orderRef,
-            customerName: data["Müşteri Adı*"],
-            orderDate: data["Sipariş Tarihi (GG.AA.YYYY)*"].toISOString(),
-            status: data["Durum (pending, processing, shipped, delivered, cancelled)*"],
-            notes: data["Notlar"] || undefined,
+        if (!ordersFromFile.has(orderKey)) {
+          ordersFromFile.set(orderKey, {
+            customerName: customerName,
+            orderDate: orderDate.toISOString(), // Store as ISO string
             items: [],
-            totalAmount: 0,
           });
         }
         
-        const orderEntry = ordersFromFile.get(orderRef)!;
-        // If orderRef was marked to be skipped earlier, skip adding items.
-        if (errorMessages.some(msg => msg.includes(`'${orderRef}' referanslı sipariş sistemde zaten mevcut`))) {
-            continue;
+        const orderEntry = ordersFromFile.get(orderKey)!;
+        
+        // Check for duplicate product within the same conceptual order from file
+        if (orderEntry.items.some(item => item.productId === product.id)) {
+             errorMessages.push(`Satır ${rowIndex}: '${customerName}' (${orderDateString}) siparişi için '${product.productCode}' ürünü dosyada birden fazla kez tanımlanmış. İlk tanım geçerli olacak veya miktarlar toplanabilir (şu an değil).`);
+             // For simplicity, skip duplicate product for now. Could also sum quantities.
+             errorCount++;
+             continue;
         }
 
         orderEntry.items.push({
           productId: product.id,
           quantity: data["Miktar*"],
-          unitPrice: data["Birim Fiyat*"],
         });
       }
       
-      for (const [orderRef, orderData] of ordersFromFile.entries()) {
-        if (existingOrders.some(eo => eo.orderReference.toLowerCase() === orderRef.toLowerCase())) {
-            // This check is somewhat redundant if the above check during row processing worked correctly
-            // by skipping all items for an existing orderRef.
-            if (!errorMessages.some(msg => msg.includes(`'${orderRef}' referanslı sipariş sistemde zaten mevcut`))) {
-                 errorMessages.push(`'${orderRef}' referanslı sipariş sistemde zaten mevcut olduğundan içe aktarılmadı.`);
-            }
-            errorCount++;
-            continue;
-        }
-
+      for (const [orderKey, orderData] of ordersFromFile.entries()) {
         if (orderData.items!.length === 0) {
-          errorMessages.push(`'${orderRef}' referanslı sipariş için geçerli ürün eklenemedi.`);
+          errorMessages.push(`'${orderKey.split('#')[0]}' (${orderKey.split('#')[1]}) siparişi için geçerli ürün eklenemedi.`);
           errorCount++;
           continue;
         }
-
-        orderData.totalAmount = orderData.items!.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
         
         try {
           addCustomerOrder({
             id: crypto.randomUUID(),
-            ...orderData
-          } as CustomerOrder);
+            customerName: orderData.customerName,
+            orderDate: orderData.orderDate,
+            items: orderData.items,
+          } as CustomerOrder); // Removed totalAmount, status, notes
           successCount++;
         } catch (e: any) {
-          errorMessages.push(`'${orderRef}' siparişi eklenirken hata: ${e.message}`);
+          errorMessages.push(`'${orderKey}' siparişi eklenirken hata: ${e.message}`);
           errorCount++;
         }
       }
 
-      let toastDescription = `${successCount} sipariş başarıyla içe aktarıldı.`;
+      let toastDescription = `${successCount} müşteri siparişi başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
         toastDescription += ` ${errorCount} satır/siparişte hata oluştu veya atlandı.`;
         console.error("İçe aktarma hataları:", errorMessages.join("\n"));
@@ -273,7 +250,7 @@ export default function CustomerOrdersPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Yeni Sipariş Ekle
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-2xl"> {/* Increased width for order form */}
+            <DialogContent className="sm:max-w-xl"> {/* Adjusted width for simplified form */}
               <CustomerOrderForm
                 order={editingOrder}
                 onSuccess={() => {
@@ -366,3 +343,4 @@ export default function CustomerOrdersPage() {
     </div>
   );
 }
+
