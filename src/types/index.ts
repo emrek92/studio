@@ -43,21 +43,20 @@ export interface ProductionLog {
 export interface OrderItem {
   productId: string; // Mamul ID'si
   quantity: number;
-  // unitPrice removed as per simplification
-  // productDescription is derived, not stored here
 }
-
-// OrderStatus removed as per simplification
-// export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
 
 export interface CustomerOrder {
   id: string;
-  // orderReference removed
   customerName: string;
   orderDate: string; // ISO tarih formatı
   items: OrderItem[];
-  // totalAmount removed
-  // status removed
-  // notes removed
 }
 
+export interface ShipmentLog {
+  id: string;
+  productId: string; // Sevk edilen Mamul ID'si
+  quantity: number;
+  date: string; // ISO tarih formatı
+  customerOrderId?: string; // Bağlı müşteri sipariş ID'si (opsiyonel)
+  notes?: string;
+}

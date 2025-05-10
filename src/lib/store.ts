@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem } from '@/types'; // OrderStatus removed
+import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem, ShipmentLog } from '@/types';
 
 interface AppState {
   products: Product[];
@@ -8,6 +8,7 @@ interface AppState {
   rawMaterialEntries: RawMaterialEntry[];
   productionLogs: ProductionLog[];
   customerOrders: CustomerOrder[];
+  shipmentLogs: ShipmentLog[];
 
   // Product actions
   addProduct: (product: Product) => void;
@@ -37,6 +38,11 @@ interface AppState {
   updateCustomerOrder: (updatedOrder: CustomerOrder) => void;
   deleteCustomerOrder: (orderId: string) => void;
   getCustomerOrderById: (orderId: string) => CustomerOrder | undefined;
+
+  // ShipmentLog actions
+  addShipmentLog: (log: ShipmentLog) => void;
+  updateShipmentLog: (updatedLog: ShipmentLog) => void;
+  deleteShipmentLog: (logId: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -47,6 +53,7 @@ export const useStore = create<AppState>()(
       rawMaterialEntries: [],
       productionLogs: [],
       customerOrders: [],
+      shipmentLogs: [],
 
       // Product actions
       addProduct: (product) => {
@@ -63,7 +70,6 @@ export const useStore = create<AppState>()(
       deleteProduct: (productId) =>
         set((state) => ({
           products: state.products.filter((p) => p.id !== productId),
-          // Also consider implications for BOMs and entries/logs
         })),
       getProductById: (productId) => get().products.find(p => p.id === productId),
       getProductByCode: (productCode) => get().products.find(p => p.productCode.toLowerCase() === productCode.toLowerCase()),
@@ -94,14 +100,7 @@ export const useStore = create<AppState>()(
         if (!oldEntry) {
           throw new Error("Güncellenecek hammadde girişi bulunamadı.");
         }
-        // Assuming productId does not change during an update for simplicity.
-        // If it could, logic here would be more complex involving two products.
         if (oldEntry.productId !== updatedEntry.productId) {
-            // This case should ideally be handled by deleting old and adding new if product changes.
-            // For now, let's assume product ID remains same during an update.
-            // If product ID can change, we'd need to:
-            // 1. Add oldEntry.quantity back to oldEntry.productId
-            // 2. Subtract updatedEntry.quantity from updatedEntry.productId
             throw new Error("Hammadde girişi güncellenirken ürün ID'si değiştirilemez. Lütfen mevcut kaydı silip yeni bir kayıt oluşturun.");
         }
 
@@ -120,7 +119,7 @@ export const useStore = create<AppState>()(
         if (!entryToDelete) {
           throw new Error("Silinecek hammadde girişi bulunamadı.");
         }
-        const stockAdjustment = -entryToDelete.quantity; // Add back to stock
+        const stockAdjustment = -entryToDelete.quantity; 
         set((state) => ({
           rawMaterialEntries: state.rawMaterialEntries.filter((e) => e.id !== entryId),
           products: state.products.map((p) =>
@@ -189,7 +188,6 @@ export const useStore = create<AppState>()(
           throw new Error("Eski üretim kaydının ürün reçetesi bulunamadı.");
         }
 
-        // Revert old stock changes
         let tempProducts = [...products];
         tempProducts = tempProducts.map(p => {
           if (p.id === oldLog.productId) {
@@ -206,7 +204,6 @@ export const useStore = create<AppState>()(
           });
         });
 
-        // Apply new stock changes (with validation)
         const newBom = boms.find(b => b.id === updatedLog.bomId);
         if (!newBom) {
           throw new Error("Yeni üretim kaydının ürün reçetesi bulunamadı.");
@@ -226,7 +223,6 @@ export const useStore = create<AppState>()(
           throw new Error(`Güncelleme başarısız: Yeni üretim için yeterli '${insufficientComponentName}' bileşen stoğu yok.`);
         }
 
-        // Apply new stock changes
         let finalProducts = [...tempProducts];
         newBom.components.forEach(comp => {
           finalProducts = finalProducts.map(p => {
@@ -262,7 +258,6 @@ export const useStore = create<AppState>()(
         }
 
         let updatedProducts = [...products];
-        // Add back components
         bomUsed.components.forEach(comp => {
           updatedProducts = updatedProducts.map(p => {
             if (p.id === comp.productId) {
@@ -271,7 +266,6 @@ export const useStore = create<AppState>()(
             return p;
           });
         });
-        // Remove produced product
         updatedProducts = updatedProducts.map(p => {
           if (p.id === logToDelete.productId) {
             return { ...p, stock: p.stock - logToDelete.quantity };
@@ -287,8 +281,6 @@ export const useStore = create<AppState>()(
 
       // Customer Order Actions
       addCustomerOrder: (order) => {
-        // No uniqueness check for orderReference as it's removed.
-        // Stocks are not affected by customer orders in this version.
         set((state) => ({ customerOrders: [...state.customerOrders, order] }));
       },
       updateCustomerOrder: (updatedOrder) =>
@@ -300,6 +292,80 @@ export const useStore = create<AppState>()(
           customerOrders: state.customerOrders.filter((o) => o.id !== orderId),
         })),
       getCustomerOrderById: (orderId) => get().customerOrders.find(o => o.id === orderId),
+
+      // ShipmentLog Actions
+      addShipmentLog: (log) => {
+        const product = get().products.find(p => p.id === log.productId);
+        if (!product) {
+          throw new Error(`Sevk edilecek ürün (ID: ${log.productId}) bulunamadı.`);
+        }
+        if (product.stock < log.quantity) {
+          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için ${log.quantity} adet sevk edilemez. Mevcut stok: ${product.stock}.`);
+        }
+        set((state) => ({
+          shipmentLogs: [...state.shipmentLogs, log],
+          products: state.products.map((p) =>
+            p.id === log.productId ? { ...p, stock: p.stock - log.quantity } : p
+          ),
+        }));
+      },
+      updateShipmentLog: (updatedLog) => {
+        const { products, shipmentLogs } = get();
+        const oldLog = shipmentLogs.find(l => l.id === updatedLog.id);
+
+        if (!oldLog) {
+          throw new Error("Güncellenecek sevkiyat kaydı bulunamadı.");
+        }
+        // Product ID cannot change during update for simplicity
+        if (oldLog.productId !== updatedLog.productId) {
+          throw new Error("Sevkiyat kaydı güncellenirken ürün ID'si değiştirilemez. Lütfen mevcut kaydı silip yeni bir kayıt oluşturun.");
+        }
+
+        const product = products.find(p => p.id === updatedLog.productId);
+        if (!product) {
+          throw new Error(`Sevk edilen ürün (ID: ${updatedLog.productId}) bulunamadı.`);
+        }
+
+        const quantityChange = updatedLog.quantity - oldLog.quantity; // new quantity - old quantity
+        const newStockForProduct = product.stock - quantityChange; // if new qty > old qty, change is positive, stock decreases more. if new qty < old qty, change is negative, stock increases.
+
+        if (newStockForProduct < 0) {
+          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için stok ${newStockForProduct} olamaz. Mevcut stok: ${product.stock}, Eski sevk: ${oldLog.quantity}, Yeni sevk: ${updatedLog.quantity}.`);
+        }
+        
+        set((state) => ({
+          shipmentLogs: state.shipmentLogs.map((l) => (l.id === updatedLog.id ? updatedLog : l)),
+          products: state.products.map((p) =>
+            p.id === updatedLog.productId ? { ...p, stock: newStockForProduct } : p
+          ),
+        }));
+      },
+      deleteShipmentLog: (logId) => {
+        const { products, shipmentLogs } = get();
+        const logToDelete = shipmentLogs.find(l => l.id === logId);
+
+        if (!logToDelete) {
+          throw new Error("Silinecek sevkiyat kaydı bulunamadı.");
+        }
+
+        const product = products.find(p => p.id === logToDelete.productId);
+        if (!product) {
+          // This case should ideally not happen if data integrity is maintained.
+          // If it does, we can only remove the log but can't adjust stock.
+          console.warn(`Sevkiyatı silinecek ürün (ID: ${logToDelete.productId}) bulunamadı. Stok ayarlanamadı.`);
+          set((state) => ({
+            shipmentLogs: state.shipmentLogs.filter((l) => l.id !== logId),
+          }));
+          return;
+        }
+
+        set((state) => ({
+          shipmentLogs: state.shipmentLogs.filter((l) => l.id !== logId),
+          products: state.products.map((p) =>
+            p.id === logToDelete.productId ? { ...p, stock: p.stock + logToDelete.quantity } : p
+          ),
+        }));
+      },
 
     }),
     {
@@ -331,3 +397,9 @@ export const getProductUnitById = (productId: string): string | undefined => {
     return product?.unit;
 }
 
+export const getCustomerOrderDisplayInfoById = (orderId?: string): string => {
+  if (!orderId) return "Sipariş Yok";
+  const order = useStore.getState().customerOrders.find(co => co.id === orderId);
+  if (!order) return "Bilinmeyen Sipariş";
+  return `${order.customerName} - ${new Date(order.orderDate).toLocaleDateString('tr-TR')}`;
+}

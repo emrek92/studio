@@ -1,7 +1,8 @@
+
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Package, ListChecks, Truck, Factory, Warehouse } from "lucide-react";
+import { Package, ListChecks, Truck, Factory, Warehouse, Send, ShoppingCart } from "lucide-react"; // Added Send and ShoppingCart
 import Link from "next/link";
 import { useStore } from "@/lib/store";
 import { useEffect, useState } from "react";
@@ -22,7 +23,7 @@ const StatCard = ({ title, value, icon: Icon, link, description }: { title: stri
 );
 
 export default function DashboardPage() {
-  const { products, boms, rawMaterialEntries, productionLogs } = useStore();
+  const { products, boms, rawMaterialEntries, productionLogs, customerOrders, shipmentLogs } = useStore();
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -37,6 +38,8 @@ export default function DashboardPage() {
   const totalBoms = boms.length;
   const totalRawMaterialEntries = rawMaterialEntries.length;
   const totalProductionLogs = productionLogs.length;
+  const totalCustomerOrders = customerOrders.length;
+  const totalShipmentLogs = shipmentLogs.length;
   const totalStockItems = products.reduce((sum, p) => sum + p.stock, 0);
 
 
@@ -45,7 +48,7 @@ export default function DashboardPage() {
       <div className="flex items-center justify-between space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Panel</h1>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"> {/* Adjusted grid for more cards */}
         <StatCard 
           title="Toplam Ürün Çeşidi" 
           value={totalProductTypes} 
@@ -81,6 +84,20 @@ export default function DashboardPage() {
           link="/productions"
           description="Tamamlanmış üretim işlemleri"
         />
+         <StatCard 
+          title="Müşteri Siparişleri" 
+          value={totalCustomerOrders} 
+          icon={ShoppingCart} 
+          link="/customer-orders"
+          description="Alınan müşteri siparişleri"
+        />
+        <StatCard 
+          title="Sevkiyat Kayıtları" 
+          value={totalShipmentLogs} 
+          icon={Send} 
+          link="/shipments"
+          description="Yapılmış sevkiyatlar"
+        />
       </div>
       <Card>
         <CardHeader>
@@ -97,6 +114,8 @@ export default function DashboardPage() {
             <li>Ürün Reçetesi (Malzeme Listesi - BOM) oluşturma ve yönetme</li>
             <li>Hammadde girişlerini kaydetme</li>
             <li>Üretim kayıtları ile stokları otomatik güncelleme</li>
+            <li>Müşteri siparişlerini yönetme</li>
+            <li>Sevkiyatları kaydetme ve stoktan düşme</li>
             <li>Anlık stok seviyelerini izleme</li>
           </ul>
         </CardContent>
