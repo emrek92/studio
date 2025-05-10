@@ -101,7 +101,7 @@ export function CustomerOrderForm({ order, onSuccess }: CustomerOrderFormProps) 
     try {
       const orderDataWithDetails = {
         ...data,
-        orderDate: data.date.toISOString(),
+        orderDate: data.orderDate.toISOString(),
         notes: data.notes || undefined,
         totalAmount: totalAmount,
       };
