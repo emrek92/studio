@@ -12,7 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command"; // Reverted to correct import path
+} from "@/components/ui/command"; // Ensured correct import path
 import {
   Popover,
   PopoverContent,
