@@ -50,7 +50,7 @@ interface ProductionLogFormProps {
 }
 
 export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
-  const { products, boms, addProductionLog } = useStore();
+  const { products, boms, addProductionLog, updateProductionLog } = useStore();
   const { toast } = useToast();
 
   const finishedProducts = products.filter(p => p.type === 'mamul');
@@ -58,7 +58,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   const form = useForm<ProductionLogFormValues>({
     resolver: zodResolver(productionLogFormSchema),
     defaultValues: log
-      ? { ...log, date: new Date(log.date) }
+      ? { ...log, date: new Date(log.date), notes: log.notes || "" }
       : {
           productId: "",
           bomId: "",
@@ -75,40 +75,45 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   }, [selectedProductId, boms]);
 
   React.useEffect(() => {
-    if (selectedProductId && availableBoms.length > 0) {
+    // If editing and the log's bomId is valid for the selected product, keep it.
+    // Otherwise, if the selected product changes or has no/different BOMs, reset bomId.
+    if (log && log.productId === selectedProductId && availableBoms.find(b => b.id === log.bomId)) {
+        // bomId is already set by defaultValues or is valid, do nothing to override
+    } else if (selectedProductId && availableBoms.length > 0) {
       const currentBomId = form.getValues("bomId");
       if (!availableBoms.find(b => b.id === currentBomId)) {
-        form.setValue("bomId", ""); 
+        // If current bomId is not in availableBoms, reset it.
+        // If it's a new form or product changed, it might pick the first or be empty.
+        // For now, just ensuring it's valid or empty.
+        // form.setValue("bomId", availableBoms[0].id); // Optionally select the first
+         form.setValue("bomId", ""); 
       }
     } else if (selectedProductId && availableBoms.length === 0) {
         form.setValue("bomId", "");
     }
-  }, [selectedProductId, availableBoms, form]);
+  }, [selectedProductId, availableBoms, form, log]);
 
 
   function onSubmit(data: ProductionLogFormValues) {
     try {
+      const logDataWithISOStringDate = {
+        ...data,
+        date: data.date.toISOString(),
+        notes: data.notes || undefined, // Ensure notes is undefined if empty, not ""
+      };
+
       if (log) {
-        // Update logic (future enhancement)
+        updateProductionLog({ ...log, ...logDataWithISOStringDate });
         toast({ title: "Üretim Kaydı Güncellendi", description: `Kayıt başarıyla güncellendi.` });
       } else {
         const newLog: ProductionLog = {
           id: crypto.randomUUID(),
-          ...data,
-          date: data.date.toISOString(),
+          ...logDataWithISOStringDate,
         };
-        
-        const initialLogCount = useStore.getState().productionLogs.length;
         addProductionLog(newLog); 
-        
-        if (useStore.getState().productionLogs.length > initialLogCount) {
-           toast({ title: "Üretim Kaydı Eklendi", description: `Yeni üretim kaydı başarıyla eklendi.` });
-           onSuccess();
-        } else {
-          // Toast for insufficient stock is handled within the store's addProductionLog or by an explicit alert there.
-          // No need to call onSuccess if log wasn't added.
-        }
+        toast({ title: "Üretim Kaydı Eklendi", description: `Yeni üretim kaydı başarıyla eklendi.` });
       }
+      onSuccess();
     } catch (error: any) {
        toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
@@ -224,6 +229,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                     onSelect={field.onChange}
                     initialFocus
                     locale={tr}
+                    disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
                   />
                 </PopoverContent>
               </Popover>
@@ -256,4 +262,3 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
     </Form>
   );
 }
-

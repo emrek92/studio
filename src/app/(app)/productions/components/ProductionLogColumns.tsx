@@ -5,11 +5,26 @@ import type { ProductionLog } from "@/types";
 import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { Button } from "@/components/ui/button";
+import { Edit, Trash2, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
-export const productionLogColumns = [
+interface ProductionLogColumnsProps {
+  onEdit: (log: ProductionLog) => void;
+  onDelete: (logId: string) => void;
+}
+
+export const getProductionLogColumns = ({ onEdit, onDelete }: ProductionLogColumnsProps) => [
   {
     accessorKey: "productInfo",
-    header: "Üretilen Ürün", // Changed header
+    header: "Üretilen Ürün", 
     cell: ({ row }: { row: ProductionLog }) => {
       const name = getProductNameById(row.productId);
       const code = getProductCodeById(row.productId);
@@ -48,11 +63,30 @@ export const productionLogColumns = [
     header: "Notlar",
     cell: ({ row }: { row: ProductionLog }) => <div className="truncate max-w-xs">{row.notes || "-"}</div>,
   },
-  // Actions column (Edit/Delete) can be added later if needed
-  // {
-  //   id: "actions",
-  //   header: "İşlemler",
-  //   cell: ({ row }: { row: ProductionLog }) => { /* Action buttons */ }
-  // },
+  {
+    id: "actions",
+    header: "İşlemler",
+    cell: ({ row }: { row: ProductionLog }) => {
+      return (
+         <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" className="h-8 w-8 p-0">
+              <span className="sr-only">Menüyü aç</span>
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onEdit(row)}>
+              <Edit className="mr-2 h-4 w-4" /> Düzenle
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onDelete(row.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+              <Trash2 className="mr-2 h-4 w-4" /> Sil
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      );
+    },
+  },
 ];
-

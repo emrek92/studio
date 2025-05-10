@@ -28,8 +28,8 @@ interface AppState {
 
   // Production Log actions
   addProductionLog: (log: ProductionLog) => void;
-  // updateProductionLog: (log: ProductionLog) => void; // Future enhancement
-  // deleteProductionLog: (logId: string) => void; // Future enhancement
+  updateProductionLog: (log: ProductionLog) => void; 
+  deleteProductionLog: (logId: string) => void; 
 }
 
 export const useStore = create<AppState>()(
@@ -86,33 +86,32 @@ export const useStore = create<AppState>()(
       addProductionLog: (log) => {
         const bom = get().boms.find(b => b.id === log.bomId);
         if (!bom) {
-          console.error("Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı");
-          alert("Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı."); // Simple alert, replace with toast
-          return; 
+          const errorMsg = "Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı.";
+          console.error(errorMsg);
+          alert(errorMsg); 
+          throw new Error(errorMsg);
         }
 
         let productsToUpdate = [...get().products];
         let possible = true;
+        let insufficientComponentName = '';
 
         const componentUpdates = bom.components.map(component => {
           const product = productsToUpdate.find(p => p.id === component.productId);
           if (!product || product.stock < component.quantity * log.quantity) {
             possible = false;
+            insufficientComponentName = product ? product.name : `ID: ${component.productId}`;
           }
           return {
             productId: component.productId,
             newStock: product ? product.stock - (component.quantity * log.quantity) : 0,
-            productName: product ? product.name : 'Bilinmeyen Bileşen'
           };
         });
         
         if (!possible) {
-          const insufficientComponent = componentUpdates.find(cu => {
-            const product = productsToUpdate.find(p => p.id === cu.productId);
-            return !product || product.stock < (bom.components.find(c=>c.productId === cu.productId)?.quantity || 0) * log.quantity;
-          });
-          alert(`Üretim için yeterli '${insufficientComponent?.productName || ''}' bileşen stoğu bulunmamaktadır.`); // Simple alert, replace with toast
-          return; // Stop processing
+          const errorMsg = `Üretim için yeterli '${insufficientComponentName}' bileşen stoğu bulunmamaktadır.`;
+          alert(errorMsg);
+          throw new Error(errorMsg);
         }
 
         componentUpdates.forEach(update => {
@@ -128,6 +127,114 @@ export const useStore = create<AppState>()(
         set({
           productionLogs: [...get().productionLogs, log],
           products: productsToUpdate,
+        });
+      },
+      updateProductionLog: (updatedLog) => {
+        const { products, boms, productionLogs } = get();
+        const oldLog = productionLogs.find(l => l.id === updatedLog.id);
+
+        if (!oldLog) {
+          throw new Error("Güncellenecek üretim kaydı bulunamadı.");
+        }
+
+        const oldBom = boms.find(b => b.id === oldLog.bomId);
+        if (!oldBom) {
+          throw new Error("Eski üretim kaydının ürün reçetesi bulunamadı.");
+        }
+
+        // Revert old stock changes
+        let tempProducts = [...products];
+        tempProducts = tempProducts.map(p => {
+          if (p.id === oldLog.productId) {
+            return { ...p, stock: p.stock - oldLog.quantity };
+          }
+          return p;
+        });
+        oldBom.components.forEach(comp => {
+          tempProducts = tempProducts.map(p => {
+            if (p.id === comp.productId) {
+              return { ...p, stock: p.stock + (comp.quantity * oldLog.quantity) };
+            }
+            return p;
+          });
+        });
+
+        // Apply new stock changes (with validation)
+        const newBom = boms.find(b => b.id === updatedLog.bomId);
+        if (!newBom) {
+          throw new Error("Yeni üretim kaydının ürün reçetesi bulunamadı.");
+        }
+
+        let possible = true;
+        let insufficientComponentName = '';
+        newBom.components.forEach(comp => {
+          const product = tempProducts.find(p => p.id === comp.productId);
+          if (!product || product.stock < comp.quantity * updatedLog.quantity) {
+            possible = false;
+            insufficientComponentName = product ? product.name : `ID: ${comp.productId}`;
+          }
+        });
+
+        if (!possible) {
+          throw new Error(`Güncelleme başarısız: Yeni üretim için yeterli '${insufficientComponentName}' bileşen stoğu yok.`);
+        }
+
+        // Apply new stock changes
+        let finalProducts = [...tempProducts];
+        newBom.components.forEach(comp => {
+          finalProducts = finalProducts.map(p => {
+            if (p.id === comp.productId) {
+              return { ...p, stock: p.stock - (comp.quantity * updatedLog.quantity) };
+            }
+            return p;
+          });
+        });
+        finalProducts = finalProducts.map(p => {
+          if (p.id === updatedLog.productId) {
+            return { ...p, stock: p.stock + updatedLog.quantity };
+          }
+          return p;
+        });
+        
+        set({
+          products: finalProducts,
+          productionLogs: productionLogs.map(l => l.id === updatedLog.id ? updatedLog : l),
+        });
+      },
+      deleteProductionLog: (logId) => {
+        const { products, boms, productionLogs } = get();
+        const logToDelete = productionLogs.find(l => l.id === logId);
+
+        if (!logToDelete) {
+          throw new Error("Silinecek üretim kaydı bulunamadı.");
+        }
+
+        const bomUsed = boms.find(b => b.id === logToDelete.bomId);
+        if (!bomUsed) {
+          throw new Error("Silinecek üretim kaydının ürün reçetesi bulunamadı.");
+        }
+
+        let updatedProducts = [...products];
+        // Add back components
+        bomUsed.components.forEach(comp => {
+          updatedProducts = updatedProducts.map(p => {
+            if (p.id === comp.productId) {
+              return { ...p, stock: p.stock + (comp.quantity * logToDelete.quantity) };
+            }
+            return p;
+          });
+        });
+        // Remove produced product
+        updatedProducts = updatedProducts.map(p => {
+          if (p.id === logToDelete.productId) {
+            return { ...p, stock: p.stock - logToDelete.quantity };
+          }
+          return p;
+        });
+
+        set({
+          products: updatedProducts,
+          productionLogs: productionLogs.filter(l => l.id !== logId),
         });
       },
     }),

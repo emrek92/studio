@@ -9,7 +9,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ProductionLogForm } from "./components/ProductionLogForm";
-import { productionLogColumns } from "./components/ProductionLogColumns";
+import { getProductionLogColumns } from "./components/ProductionLogColumns";
 import { useStore } from "@/lib/store";
 import type { ProductionLog } from "@/types";
 import { DataTable } from "@/components/DataTable";
@@ -24,12 +24,24 @@ import { format, isValid, parse } from "date-fns";
 import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 
 export default function ProductionLogsPage() {
-  const { productionLogs, products, boms, addProductionLog } = useStore();
+  const { productionLogs, products, boms, addProductionLog, deleteProductionLog } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editingLog, setEditingLog] = React.useState<ProductionLog | undefined>(undefined);
+  const [logToDelete, setLogToDelete] = React.useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
   const { toast } = useToast();
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
@@ -38,7 +50,29 @@ export default function ProductionLogsPage() {
     setIsMounted(true);
   }, []);
 
-  const columns = productionLogColumns;
+  const handleEdit = (log: ProductionLog) => {
+    setEditingLog(log);
+    setIsFormOpen(true);
+  };
+
+  const handleDeleteConfirm = (logId: string) => {
+    setLogToDelete(logId);
+  };
+
+  const handleDelete = () => {
+    if (logToDelete) {
+      try {
+        deleteProductionLog(logToDelete);
+        toast({ title: "Üretim Kaydı Silindi", description: "Üretim kaydı başarıyla silindi." });
+      } catch (error: any) {
+        toast({ title: "Silme Hatası", description: error.message || "Kayıt silinirken bir hata oluştu.", variant: "destructive" });
+      }
+      setLogToDelete(null);
+    }
+  };
+
+  const columns = React.useMemo(() => getProductionLogColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, boms]);
+
 
   const logsToDisplay = React.useMemo(() => {
     if (!selectedDate) {
@@ -47,7 +81,6 @@ export default function ProductionLogsPage() {
     return productionLogs
       .filter(log => {
         const logDate = new Date(log.date);
-        // Compare year, month, and day
         return logDate.getFullYear() === selectedDate.getFullYear() &&
                logDate.getMonth() === selectedDate.getMonth() &&
                logDate.getDate() === selectedDate.getDate();
@@ -106,25 +139,21 @@ export default function ProductionLogsPage() {
             const parsedDate = parse(val, "dd.MM.yyyy", new Date());
             if (isValid(parsedDate)) return parsedDate;
           }
-          if (typeof val === 'number') { // Excel date serial number
-            const excelEpoch = new Date(1899, 11, 30); // Excel epoch starts Dec 30, 1899 for Windows
-            const jsDate = new Date(excelEpoch.getTime() + val * 24 * 60 * 60 * 1000);
+          if (typeof val === 'number') { 
+            const excelEpoch = new Date(1899, 11, 30); 
+            const jsDate = new Date(excelEpoch.getTime() + (val - (val > 59 ? 1 : 0) ) * 24 * 60 * 60 * 1000); // Excel leap year bug for 1900
             if (isValid(jsDate)) return jsDate;
           }
-          return undefined; // Let Zod handle the error
+          return undefined; 
         }, z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir (GG.AA.YYYY)."}) })),
         "Notlar": z.string().optional().nullable(),
       });
       
       for (const row of sheet) {
-        // Skip empty rows or rows that are likely headers/notes based on fewer expected values
         const nonEmptyCellCount = Object.values(row).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length;
-        if (nonEmptyCellCount === 0) continue; // Skip completely empty rows
-        if (nonEmptyCellCount < 3 && sheet.indexOf(row) > 0) { // Heuristic for notes/instruction rows, skip if not the first potential header
-            // Potentially a note row, we might log it or ignore it. For now, ignore.
+        if (nonEmptyCellCount < 3 && sheet.indexOf(row) > 0) { 
             continue;
         }
-
 
         const validationResult = importSchema.safeParse(row);
         if (validationResult.success) {
@@ -147,38 +176,20 @@ export default function ProductionLogsPage() {
             errorCount++;
             continue;
           }
-
-          let canProduce = true;
-          for (const component of bom.components) {
-            const componentProduct = allProducts.find(p => p.id === component.productId);
-            if (!componentProduct || componentProduct.stock < component.quantity * data["Üretim Miktarı*"]) {
-              canProduce = false;
-              errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) üretimi için yeterli '${componentProduct?.productCode || component.productId}' (${componentProduct?.name || 'Bilinmeyen'}) stoğu yok.`);
-              break;
-            }
-          }
-          if(!canProduce) {
-            errorCount++;
-            continue;
-          }
-
-          const newLog: ProductionLog = {
-            id: crypto.randomUUID(),
-            productId: producedProduct.id,
-            bomId: bom.id,
-            quantity: data["Üretim Miktarı*"],
-            date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
-            notes: data["Notlar"] || undefined,
-          };
           
-          const initialLogCount = useStore.getState().productionLogs.length;
-          addProductionLog(newLog);
-          if (useStore.getState().productionLogs.length > initialLogCount) {
+          try {
+            const newLog: ProductionLog = {
+              id: crypto.randomUUID(),
+              productId: producedProduct.id,
+              bomId: bom.id,
+              quantity: data["Üretim Miktarı*"],
+              date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
+              notes: data["Notlar"] || undefined,
+            };
+            addProductionLog(newLog);
             successCount++;
-          } else {
-            // This case should ideally be caught by the canProduce check or the store's internal logic
-            const mainProductName = findProductByCode(producedProductCode, allProducts)?.name || producedProductCode;
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${mainProductName}' üretimi yapılamadı (muhtemelen stok yetersiz veya başka bir sorun).`);
+          } catch (e: any) {
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) üretimi sırasında hata: ${e.message}`);
             errorCount++;
           }
 
@@ -189,18 +200,18 @@ export default function ProductionLogsPage() {
         }
       }
 
-      let description = `${successCount} üretim kaydı başarıyla içe aktarıldı.`;
+      let toastDescription = `${successCount} üretim kaydı başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
-        description += ` ${errorCount} kayıtta hata oluştu.`;
+        toastDescription += ` ${errorCount} kayıtta hata oluştu.`;
         console.error("İçe aktarma hataları:", errorMessages.join("\n"));
         toast({
             title: errorCount > 0 && successCount > 0 ? "Kısmi İçe Aktarma Tamamlandı" : "İçe Aktarma Başarısız",
-            description: `${description}\nDetaylar için konsolu kontrol edin.`,
+            description: `${toastDescription}\nDetaylar için konsolu kontrol edin.`,
             variant: errorCount > 0 && successCount === 0 ? "destructive" : "default",
             duration: 10000,
          });
       } else {
-        toast({ title: "İçe Aktarma Tamamlandı", description });
+        toast({ title: "İçe Aktarma Tamamlandı", description: toastDescription });
       }
       if(successCount > 0) setIsImportModalOpen(false);
 
@@ -222,7 +233,10 @@ export default function ProductionLogsPage() {
           <Button onClick={() => setIsImportModalOpen(true)} variant="outline">
             <UploadCloud className="mr-2 h-4 w-4" /> Excel'den İçe Aktar
           </Button>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
+              setIsFormOpen(isOpen);
+              if (!isOpen) setEditingLog(undefined);
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" /> Yeni Üretim Kaydı
@@ -230,8 +244,10 @@ export default function ProductionLogsPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <ProductionLogForm
+                log={editingLog}
                 onSuccess={() => {
                   setIsFormOpen(false);
+                  setEditingLog(undefined);
                 }}
               />
             </DialogContent>
@@ -262,6 +278,7 @@ export default function ProductionLogsPage() {
               onSelect={setSelectedDate}
               initialFocus
               locale={tr}
+              disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
             />
           </PopoverContent>
         </Popover>
@@ -275,6 +292,25 @@ export default function ProductionLogsPage() {
 
       <DataTable columns={columns} data={logsToDisplay} />
       
+      {logToDelete && (
+        <AlertDialog open={!!logToDelete} onOpenChange={() => setLogToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Üretim Kaydını Silmek İstediğinize Emin Misiniz?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Bu işlem geri alınamaz. Bu üretim kaydı ve ilişkili stok hareketleri geri alınacaktır.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setLogToDelete(null)}>İptal Et</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                Sil
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+
       <ExcelImportDialog
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
@@ -286,4 +322,3 @@ export default function ProductionLogsPage() {
     </div>
   );
 }
-
