@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -113,7 +114,10 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                 <SelectContent>
                   {rawMaterials.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.productCode} - {p.name} ({p.unit})
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{p.name} ({p.unit})</span>
+                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -215,3 +219,4 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
     </Form>
   );
 }
+

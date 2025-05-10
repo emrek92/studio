@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { BOM } from "@/types";
@@ -33,11 +34,16 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
   },
   {
     accessorKey: "mainProductInfo",
-    header: "Ana Ürün (Kod - Ad)",
+    header: "Ana Ürün", // Changed header
     cell: ({ row }: { row: BOM }) => {
-        const code = getProductCodeById(row.productId);
         const name = getProductNameById(row.productId);
-        return code ? `${code} - ${name}` : name;
+        const code = getProductCodeById(row.productId);
+        return (
+          <div>
+            <div className="font-medium">{name}</div>
+            {code && <div className="text-xs text-muted-foreground font-mono">{code}</div>}
+          </div>
+        );
     }
   },
   {
@@ -62,7 +68,8 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
                 const componentName = getProductNameById(c.productId);
                 return (
                   <div key={c.productId} className="text-xs">
-                    {componentCode ? `${componentCode} - ` : ''}{componentName}: {c.quantity}
+                    {componentCode && <span className="font-mono bg-muted text-muted-foreground px-0.5 rounded">{componentCode}</span>}
+                    <span className={componentCode ? "ml-1" : ""}>{componentName}</span>: {c.quantity}
                   </div>
                 )
               })}
@@ -99,3 +106,4 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
     },
   },
 ];
+

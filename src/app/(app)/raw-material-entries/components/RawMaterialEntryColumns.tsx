@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { RawMaterialEntry } from "@/types";
@@ -8,11 +9,16 @@ import { tr } from "date-fns/locale";
 export const rawMaterialEntryColumns = [
   {
     accessorKey: "productInfo",
-    header: "Hammadde (Kod - Ad)",
+    header: "Hammadde/Yardımcı Mlz.", // Changed header
     cell: ({ row }: { row: RawMaterialEntry }) => {
-      const code = getProductCodeById(row.productId);
       const name = getProductNameById(row.productId);
-      return <div className="font-medium">{code ? `${code} - ${name}` : name}</div>;
+      const code = getProductCodeById(row.productId);
+      return (
+        <div>
+          <div className="font-medium">{name}</div>
+          {code && <div className="text-xs text-muted-foreground font-mono">{code}</div>}
+        </div>
+      );
     },
   },
   {
@@ -45,3 +51,4 @@ export const rawMaterialEntryColumns = [
   //   cell: ({ row }: { row: RawMaterialEntry }) => { /* Action buttons */ }
   // },
 ];
+

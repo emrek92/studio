@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -139,7 +140,10 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                 <SelectContent>
                   {finishedProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.productCode} - {p.name}
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm">{p.name}</span>
+                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -252,3 +256,4 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
     </Form>
   );
 }
+

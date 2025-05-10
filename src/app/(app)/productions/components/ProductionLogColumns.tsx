@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ProductionLog } from "@/types";
@@ -8,11 +9,16 @@ import { tr } from "date-fns/locale";
 export const productionLogColumns = [
   {
     accessorKey: "productInfo",
-    header: "Üretilen Ürün (Kod - Ad)",
+    header: "Üretilen Ürün", // Changed header
     cell: ({ row }: { row: ProductionLog }) => {
-      const code = getProductCodeById(row.productId);
       const name = getProductNameById(row.productId);
-      return <div className="font-medium">{code ? `${code} - ${name}` : name}</div>;
+      const code = getProductCodeById(row.productId);
+      return (
+        <div>
+          <div className="font-medium">{name}</div>
+          {code && <div className="text-xs text-muted-foreground font-mono">{code}</div>}
+        </div>
+      );
     },
   },
   {
@@ -49,3 +55,4 @@ export const productionLogColumns = [
   //   cell: ({ row }: { row: ProductionLog }) => { /* Action buttons */ }
   // },
 ];
+
