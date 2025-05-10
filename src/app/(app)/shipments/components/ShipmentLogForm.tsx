@@ -34,11 +34,13 @@ import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
+const NO_CUSTOMER_ORDER_SELECTED_VALUE = "__no_customer_order__";
+
 const shipmentLogFormSchema = z.object({
   productId: z.string().min(1, "Ürün seçilmelidir."),
   quantity: z.coerce.number().positive("Miktar pozitif bir sayı olmalıdır."),
   date: z.date({ required_error: "Tarih seçilmelidir." }),
-  customerOrderId: z.string().optional(),
+  customerOrderId: z.string().optional(), // This will hold either an ID or NO_CUSTOMER_ORDER_SELECTED_VALUE
   notes: z.string().optional(),
 });
 
@@ -58,12 +60,17 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
   const form = useForm<ShipmentLogFormValues>({
     resolver: zodResolver(shipmentLogFormSchema),
     defaultValues: log
-      ? { ...log, date: new Date(log.date), notes: log.notes || "", customerOrderId: log.customerOrderId || "" }
+      ? { 
+          ...log, 
+          date: new Date(log.date), 
+          notes: log.notes || "", 
+          customerOrderId: log.customerOrderId || NO_CUSTOMER_ORDER_SELECTED_VALUE 
+        }
       : {
           productId: "",
           quantity: 0,
           date: new Date(),
-          customerOrderId: "",
+          customerOrderId: NO_CUSTOMER_ORDER_SELECTED_VALUE,
           notes: "",
         },
   });
@@ -74,7 +81,7 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
         ...data,
         date: data.date.toISOString(),
         notes: data.notes || undefined,
-        customerOrderId: data.customerOrderId || undefined,
+        customerOrderId: data.customerOrderId === NO_CUSTOMER_ORDER_SELECTED_VALUE ? undefined : data.customerOrderId,
       };
 
       if (log) {
@@ -109,7 +116,7 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
               <FormLabel>Sevk Edilen Ürün (Mamul)</FormLabel>
               <Select 
                 onValueChange={field.onChange} 
-                defaultValue={field.value}
+                value={field.value}
                 disabled={!!log} // Disable product change when editing
               >
                 <FormControl>
@@ -154,14 +161,17 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Müşteri Siparişi (Opsiyonel)</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} value={field.value || ""}>
+              <Select 
+                onValueChange={field.onChange} 
+                value={field.value} // Controlled by RHF; will be an ID or NO_CUSTOMER_ORDER_SELECTED_VALUE
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Müşteri siparişi seçin (opsiyonel)" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="">Sipariş Yok</SelectItem>
+                  <SelectItem value={NO_CUSTOMER_ORDER_SELECTED_VALUE}>Sipariş Yok</SelectItem>
                   {customerOrders.map((order) => (
                     <SelectItem key={order.id} value={order.id}>
                       {getCustomerOrderDisplayInfoById(order.id)}
@@ -240,3 +250,4 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
     </Form>
   );
 }
+
