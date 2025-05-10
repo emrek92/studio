@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -38,7 +37,12 @@ import {
 
 
 export default function ShipmentsPage() {
-  const { shipmentLogs, products, customerOrders, addShipmentLog, deleteShipmentLog } = useStore();
+  const shipmentLogs = useStore(state => state.shipmentLogs);
+  const products = useStore(state => state.products);
+  const customerOrders = useStore(state => state.customerOrders);
+  const addShipmentLog = useStore(state => state.addShipmentLog);
+  const deleteShipmentLog = useStore(state => state.deleteShipmentLog);
+
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingLog, setEditingLog] = React.useState<ShipmentLog | undefined>(undefined);
@@ -336,3 +340,4 @@ export default function ShipmentsPage() {
     </div>
   );
 }
+
