@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -63,14 +64,25 @@ export default function ProductionLogsPage() {
       const allBoms = useStore.getState().boms;
 
       const importSchema = z.object({
-        "Üretilen Mamul Kodu*": z.string().min(1, "Mamul ürün kodu zorunludur."),
-        "Kullanılan Reçetenin Ana Ürün Kodu*": z.string().min(1, "Reçete ana ürün kodu zorunludur."),
+        "Üretilen Mamul Kodu*": z.preprocess(
+          val => (typeof val === 'number' ? String(val) : val),
+          z.string().min(1, "Mamul ürün kodu zorunludur.")
+        ),
+        "Kullanılan Reçetenin Ana Ürün Kodu*": z.preprocess(
+          val => (typeof val === 'number' ? String(val) : val),
+          z.string().min(1, "Reçete ana ürün kodu zorunludur.")
+        ),
         "Üretim Miktarı*": z.preprocess(val => Number(val), z.number().positive("Miktar pozitif olmalıdır.")),
         "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
         "Notlar": z.string().optional().nullable(),
       });
       
       for (const row of sheet) {
+        // Skip empty rows or rows that are likely headers/notes based on fewer expected values
+        if (Object.values(row).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length < 3) { 
+            continue;
+        }
+
         const validationResult = importSchema.safeParse(row);
         if (validationResult.success) {
           const data = validationResult.data;
