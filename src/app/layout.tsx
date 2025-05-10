@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'StokTakip App',
-  description: 'İnventar İdarəetmə Sistemi',
+  title: 'StokTakip Uygulaması',
+  description: 'Envanter Yönetim Sistemi',
 };
 
 export default function RootLayout({

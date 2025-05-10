@@ -17,7 +17,7 @@ import { UserCircle } from "lucide-react"
 export function UserNav() {
   // Placeholder user data
   const user = {
-    name: "Admin User",
+    name: "Admin Kullanıcısı",
     email: "admin@stoktakip.com",
     avatar: "https://picsum.photos/id/237/40/40", // Placeholder image
   }
@@ -56,7 +56,7 @@ export function UserNav() {
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled>
-          Çıxış
+          Çıkış Yap
           <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
         </DropdownMenuItem>
       </DropdownMenuContent>

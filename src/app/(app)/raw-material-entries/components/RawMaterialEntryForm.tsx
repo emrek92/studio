@@ -32,9 +32,9 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 const rawMaterialEntryFormSchema = z.object({
-  productId: z.string().min(1, "Xammal seçilməlidir."),
-  quantity: z.coerce.number().positive("Miqdar müsbət olmalıdır."),
-  date: z.date({ required_error: "Tarix seçilməlidir." }),
+  productId: z.string().min(1, "Hammadde seçilmelidir."),
+  quantity: z.coerce.number().positive("Miktar pozitif olmalıdır."),
+  date: z.date({ required_error: "Tarih seçilmelidir." }),
   supplier: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -42,7 +42,7 @@ const rawMaterialEntryFormSchema = z.object({
 type RawMaterialEntryFormValues = z.infer<typeof rawMaterialEntryFormSchema>;
 
 interface RawMaterialEntryFormProps {
-  entry?: RawMaterialEntry; // For future edit functionality
+  entry?: RawMaterialEntry; 
   onSuccess: () => void;
 }
 
@@ -70,7 +70,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
       if (entry) {
         // Update logic (future enhancement)
         // updateRawMaterialEntry({ ...entry, ...data, date: data.date.toISOString() });
-        toast({ title: "Giriş Yeniləndi", description: `Giriş uğurla yeniləndi.` });
+        toast({ title: "Giriş Güncellendi", description: `Giriş başarıyla güncellendi.` });
       } else {
         const newEntry: RawMaterialEntry = {
           id: crypto.randomUUID(),
@@ -78,11 +78,11 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           date: data.date.toISOString(),
         };
         addRawMaterialEntry(newEntry);
-        toast({ title: "Xammal Girişi Əlavə Edildi", description: `Yeni xammal girişi uğurla əlavə edildi.` });
+        toast({ title: "Hammadde Girişi Eklendi", description: `Yeni hammadde girişi başarıyla eklendi.` });
       }
       onSuccess();
     } catch (error) {
-       toast({ title: "Xəta", description: "Əməliyyat zamanı xəta baş verdi.", variant: "destructive" });
+       toast({ title: "Hata", description: "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -91,9 +91,9 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <DialogHeader>
-          <DialogTitle>{entry ? "Girişi Redaktə Et" : "Yeni Xammal Girişi"}</DialogTitle>
+          <DialogTitle>{entry ? "Girişi Düzenle" : "Yeni Hammadde Girişi"}</DialogTitle>
           <DialogDescription>
-            {entry ? `Giriş məlumatlarını dəyişdirin.` : "Yeni xammal girişi üçün məlumatları daxil edin."}
+            {entry ? `Giriş bilgilerini değiştirin.` : "Yeni hammadde girişi için bilgileri girin."}
           </DialogDescription>
         </DialogHeader>
 
@@ -102,11 +102,11 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Xammal</FormLabel>
+              <FormLabel>Hammadde</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Xammal seçin" />
+                    <SelectValue placeholder="Hammadde seçin" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -127,7 +127,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="quantity"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Miqdar</FormLabel>
+              <FormLabel>Miktar</FormLabel>
               <FormControl>
                 <Input type="number" placeholder="0" {...field} />
               </FormControl>
@@ -141,7 +141,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="date"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>Tarix</FormLabel>
+              <FormLabel>Tarih</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>
@@ -153,9 +153,9 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                       )}
                     >
                       {field.value ? (
-                        format(field.value, "PPP")
+                        format(field.value, "PPP", { locale: require("date-fns/locale/tr") })
                       ) : (
-                        <span>Tarix seçin</span>
+                        <span>Tarih seçin</span>
                       )}
                       <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                     </Button>
@@ -167,6 +167,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                     selected={field.value}
                     onSelect={field.onChange}
                     initialFocus
+                    locale={require("date-fns/locale/tr")}
                   />
                 </PopoverContent>
               </Popover>
@@ -180,9 +181,9 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="supplier"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Təchizatçı (İstəyə Bağlı)</FormLabel>
+              <FormLabel>Tedarikçi (İsteğe Bağlı)</FormLabel>
               <FormControl>
-                <Input placeholder="Təchizatçı adı" {...field} />
+                <Input placeholder="Tedarikçi adı" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -194,9 +195,9 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Qeydlər (İstəyə Bağlı)</FormLabel>
+              <FormLabel>Notlar (İsteğe Bağlı)</FormLabel>
               <FormControl>
-                <Textarea placeholder="Giriş haqqında əlavə məlumat" {...field} />
+                <Textarea placeholder="Giriş hakkında ek bilgi" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -205,9 +206,9 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="outline">Ləğv Et</Button>
+            <Button type="button" variant="outline">İptal Et</Button>
           </DialogClose>
-          <Button type="submit">{entry ? "Yadda Saxla" : "Əlavə Et"}</Button>
+          <Button type="submit">{entry ? "Kaydet" : "Ekle"}</Button>
         </DialogFooter>
       </form>
     </Form>

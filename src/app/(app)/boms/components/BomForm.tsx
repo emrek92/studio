@@ -28,14 +28,14 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 
 const bomComponentSchema = z.object({
-  productId: z.string().min(1, "Komponent seçilməlidir."),
-  quantity: z.coerce.number().positive("Miqdar müsbət olmalıdır."),
+  productId: z.string().min(1, "Bileşen seçilmelidir."),
+  quantity: z.coerce.number().positive("Miktar pozitif olmalıdır."),
 });
 
 const bomFormSchema = z.object({
-  productId: z.string().min(1, "Əsas məhsul seçilməlidir."),
-  name: z.string().min(2, "BOM adı ən azı 2 simvol olmalıdır."),
-  components: z.array(bomComponentSchema).min(1, "Ən azı bir komponent əlavə edilməlidir."),
+  productId: z.string().min(1, "Ana ürün seçilmelidir."),
+  name: z.string().min(2, "Ürün Reçetesi (BOM) adı en az 2 karakter olmalıdır."),
+  components: z.array(bomComponentSchema).min(1, "En az bir bileşen eklenmelidir."),
 });
 
 type BomFormValues = z.infer<typeof bomFormSchema>;
@@ -70,18 +70,18 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
     try {
       if (bom) {
         updateBom({ ...bom, ...data });
-        toast({ title: "BOM Yeniləndi", description: `${data.name} BOM-u uğurla yeniləndi.` });
+        toast({ title: "Ürün Reçetesi (BOM) Güncellendi", description: `${data.name} adlı Ürün Reçetesi (BOM) başarıyla güncellendi.` });
       } else {
         const newBom: BOM = {
           id: crypto.randomUUID(),
           ...data,
         };
         addBom(newBom);
-        toast({ title: "BOM Əlavə Edildi", description: `${data.name} BOM-u uğurla əlavə edildi.` });
+        toast({ title: "Ürün Reçetesi (BOM) Eklendi", description: `${data.name} adlı Ürün Reçetesi (BOM) başarıyla eklendi.` });
       }
       onSuccess();
     } catch (error) {
-      toast({ title: "Xəta", description: "Əməliyyat zamanı xəta baş verdi.", variant: "destructive" });
+      toast({ title: "Hata", description: "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -90,9 +90,9 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <DialogHeader>
-          <DialogTitle>{bom ? "BOM Redaktə Et" : "Yeni BOM Yarat"}</DialogTitle>
+          <DialogTitle>{bom ? "Ürün Reçetesini (BOM) Düzenle" : "Yeni Ürün Reçetesi (BOM) Oluştur"}</DialogTitle>
           <DialogDescription>
-            {bom ? `${bom.name} BOM-unun məlumatlarını dəyişdirin.` : "Yeni BOM üçün məlumatları daxil edin."}
+            {bom ? `${bom.name} adlı Ürün Reçetesinin (BOM) bilgilerini değiştirin.` : "Yeni Ürün Reçetesi (BOM) için bilgileri girin."}
           </DialogDescription>
         </DialogHeader>
 
@@ -101,11 +101,11 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Əsas Məhsul (Məmul)</FormLabel>
+              <FormLabel>Ana Ürün (Mamul)</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Məmul seçin" />
+                    <SelectValue placeholder="Mamul seçin" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -126,9 +126,9 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>BOM Adı</FormLabel>
+              <FormLabel>Ürün Reçetesi (BOM) Adı</FormLabel>
               <FormControl>
-                <Input placeholder="Məs: Standart Məhsul A Resepti" {...field} />
+                <Input placeholder="Örn: Standart Ürün A Reçetesi" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -136,7 +136,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
         />
 
         <div>
-          <FormLabel>Komponentlər</FormLabel>
+          <FormLabel>Bileşenler</FormLabel>
           {fields.map((field, index) => (
             <div key={field.id} className="mt-2 space-y-2 p-3 border rounded-md relative">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -145,11 +145,11 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                   name={`components.${index}.productId`}
                   render={({ field: componentField }) => (
                     <FormItem>
-                      <FormLabel>Komponent Məhsulu</FormLabel>
+                      <FormLabel>Bileşen Ürünü</FormLabel>
                       <Select onValueChange={componentField.onChange} defaultValue={componentField.value}>
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Komponent seçin" />
+                            <SelectValue placeholder="Bileşen seçin" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -169,7 +169,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                   name={`components.${index}.quantity`}
                   render={({ field: componentField }) => (
                     <FormItem>
-                      <FormLabel>Miqdar</FormLabel>
+                      <FormLabel>Miktar</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="1" {...componentField} />
                       </FormControl>
@@ -201,7 +201,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
             className="mt-2"
             onClick={() => append({ productId: "", quantity: 1 })}
           >
-            <PlusCircle className="mr-2 h-4 w-4" /> Komponent Əlavə Et
+            <PlusCircle className="mr-2 h-4 w-4" /> Bileşen Ekle
           </Button>
         </div>
         
@@ -209,9 +209,9 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="outline">Ləğv Et</Button>
+            <Button type="button" variant="outline">İptal Et</Button>
           </DialogClose>
-          <Button type="submit">{bom ? "Yadda Saxla" : "Yarat"}</Button>
+          <Button type="submit">{bom ? "Kaydet" : "Oluştur"}</Button>
         </DialogFooter>
       </form>
     </Form>

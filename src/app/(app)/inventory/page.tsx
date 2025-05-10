@@ -9,11 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import type { ProductType } from "@/types";
 
 const productTypesForFilter: { value: ProductType | "all"; label: string }[] = [
-  { value: "all", label: "Bütün Növlər" },
-  { value: "hammadde", label: "Xammal" },
-  { value: "yari_mamul", label: "Yarım Məhsul" },
-  { value: "mamul", label: "Məhsul" },
-  { value: "yardimci_malzeme", label: "Köməkçi Material" },
+  { value: "all", label: "Tüm Türler" },
+  { value: "hammadde", label: "Hammadde" },
+  { value: "yari_mamul", label: "Yarı Mamul" },
+  { value: "mamul", label: "Mamul" },
+  { value: "yardimci_malzeme", label: "Yardımcı Malzeme" },
 ];
 
 export default function InventoryPage() {
@@ -35,23 +35,23 @@ export default function InventoryPage() {
   }, [products, searchTerm, selectedType]);
 
   if (!isMounted) {
-    return <div className="flex items-center justify-center h-full"><p>Yüklənir...</p></div>;
+    return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;
   }
 
   return (
     <div className="container mx-auto py-8">
       <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-        <h1 className="text-3xl font-bold">Stok Səviyyələri</h1>
+        <h1 className="text-3xl font-bold">Stok Seviyeleri</h1>
         <div className="flex gap-2 w-full sm:w-auto">
           <Input 
-            placeholder="Məhsul adı ilə axtar..."
+            placeholder="Ürün adı ile ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-sm"
           />
           <Select value={selectedType} onValueChange={(value: ProductType | "all") => setSelectedType(value)}>
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Növə görə filtrələ" />
+              <SelectValue placeholder="Türe göre filtrele" />
             </SelectTrigger>
             <SelectContent>
               {productTypesForFilter.map(type => (

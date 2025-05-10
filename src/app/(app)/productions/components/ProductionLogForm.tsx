@@ -29,21 +29,22 @@ import type { ProductionLog, Product, BOM } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
+import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
 const productionLogFormSchema = z.object({
-  productId: z.string().min(1, "Məhsul seçilməlidir."),
-  bomId: z.string().min(1, "BOM seçilməlidir."),
-  quantity: z.coerce.number().positive("Miqdar müsbət olmalıdır."),
-  date: z.date({ required_error: "Tarix seçilməlidir." }),
+  productId: z.string().min(1, "Ürün seçilmelidir."),
+  bomId: z.string().min(1, "Ürün Reçetesi (BOM) seçilmelidir."),
+  quantity: z.coerce.number().positive("Miktar pozitif olmalıdır."),
+  date: z.date({ required_error: "Tarih seçilmelidir." }),
   notes: z.string().optional(),
 });
 
 type ProductionLogFormValues = z.infer<typeof productionLogFormSchema>;
 
 interface ProductionLogFormProps {
-  log?: ProductionLog; // For future edit functionality
+  log?: ProductionLog; 
   onSuccess: () => void;
 }
 
@@ -73,7 +74,6 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   }, [selectedProductId, boms]);
 
   React.useEffect(() => {
-    // Reset BOM if selected product changes and current BOM is not valid for it
     if (selectedProductId && availableBoms.length > 0) {
       const currentBomId = form.getValues("bomId");
       if (!availableBoms.find(b => b.id === currentBomId)) {
@@ -89,28 +89,24 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
     try {
       if (log) {
         // Update logic (future enhancement)
-        toast({ title: "İstehsal Qeydi Yeniləndi", description: `Qeyd uğurla yeniləndi.` });
+        toast({ title: "Üretim Kaydı Güncellendi", description: `Kayıt başarıyla güncellendi.` });
       } else {
         const newLog: ProductionLog = {
           id: crypto.randomUUID(),
           ...data,
           date: data.date.toISOString(),
         };
-        addProductionLog(newLog); // This now handles stock checks via alert in store
-        // Assuming addProductionLog might not throw an error but uses alert for stock issues
-        // Check if a toast message has already been shown by the store (e.g., via a global toast state or a return value)
-        // For simplicity, we assume success if no alert was shown and proceed with success toast.
-        // A more robust solution would involve the store action returning a status.
+        addProductionLog(newLog); 
+        
         if (!useStore.getState().productionLogs.find(pl => pl.id === newLog.id)) {
           // This implies the log was not added, likely due to stock issue alerted in store.
-          // No success toast here.
         } else {
-           toast({ title: "İstehsal Qeydi Əlavə Edildi", description: `Yeni istehsal qeydi uğurla əlavə edildi.` });
+           toast({ title: "Üretim Kaydı Eklendi", description: `Yeni üretim kaydı başarıyla eklendi.` });
         }
       }
-      onSuccess(); // Close dialog regardless of stock alert, user was notified
+      onSuccess(); 
     } catch (error: any) {
-       toast({ title: "Xəta", description: error.message || "Əməliyyat zamanı xəta baş verdi.", variant: "destructive" });
+       toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -119,9 +115,9 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <DialogHeader>
-          <DialogTitle>{log ? "İstehsal Qeydini Redaktə Et" : "Yeni İstehsal Qeydi"}</DialogTitle>
+          <DialogTitle>{log ? "Üretim Kaydını Düzenle" : "Yeni Üretim Kaydı"}</DialogTitle>
           <DialogDescription>
-            {log ? `Qeyd məlumatlarını dəyişdirin.` : "Yeni istehsal qeydi üçün məlumatları daxil edin."}
+            {log ? `Kayıt bilgilerini değiştirin.` : "Yeni üretim kaydı için bilgileri girin."}
           </DialogDescription>
         </DialogHeader>
 
@@ -130,11 +126,11 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>İstehsal Olunan Məhsul (Məmul)</FormLabel>
+              <FormLabel>Üretilen Ürün (Mamul)</FormLabel>
               <Select onValueChange={(value) => { field.onChange(value); form.setValue("bomId", ""); }} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Məmul seçin" />
+                    <SelectValue placeholder="Mamul seçin" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -155,11 +151,11 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="bomId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>İstifadə Olunan BOM</FormLabel>
+              <FormLabel>Kullanılan Ürün Reçetesi (BOM)</FormLabel>
               <Select onValueChange={field.onChange} value={field.value} disabled={!selectedProductId || availableBoms.length === 0}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder={!selectedProductId ? "Əvvəlcə məhsul seçin" : availableBoms.length === 0 ? "Bu məhsul üçün BOM yoxdur" : "BOM seçin"} />
+                    <SelectValue placeholder={!selectedProductId ? "Önce ürün seçin" : availableBoms.length === 0 ? "Bu ürün için Ürün Reçetesi (BOM) yok" : "Ürün Reçetesi (BOM) seçin"} />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -180,7 +176,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="quantity"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>İstehsal Miqdarı</FormLabel>
+              <FormLabel>Üretim Miktarı</FormLabel>
               <FormControl>
                 <Input type="number" placeholder="0" {...field} />
               </FormControl>
@@ -194,7 +190,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="date"
           render={({ field }) => (
             <FormItem className="flex flex-col">
-              <FormLabel>İstehsal Tarixi</FormLabel>
+              <FormLabel>Üretim Tarihi</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>
@@ -206,9 +202,9 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                       )}
                     >
                       {field.value ? (
-                        format(field.value, "PPP")
+                        format(field.value, "PPP", { locale: tr })
                       ) : (
-                        <span>Tarix seçin</span>
+                        <span>Tarih seçin</span>
                       )}
                       <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
                     </Button>
@@ -220,6 +216,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                     selected={field.value}
                     onSelect={field.onChange}
                     initialFocus
+                    locale={tr}
                   />
                 </PopoverContent>
               </Popover>
@@ -233,9 +230,9 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="notes"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Qeydlər (İstəyə Bağlı)</FormLabel>
+              <FormLabel>Notlar (İsteğe Bağlı)</FormLabel>
               <FormControl>
-                <Textarea placeholder="İstehsal haqqında əlavə məlumat" {...field} />
+                <Textarea placeholder="Üretim hakkında ek bilgi" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -244,9 +241,9 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
 
         <DialogFooter>
           <DialogClose asChild>
-            <Button type="button" variant="outline">Ləğv Et</Button>
+            <Button type="button" variant="outline">İptal Et</Button>
           </DialogClose>
-          <Button type="submit">{log ? "Yadda Saxla" : "Əlavə Et"}</Button>
+          <Button type="submit">{log ? "Kaydet" : "Ekle"}</Button>
         </DialogFooter>
       </form>
     </Form>

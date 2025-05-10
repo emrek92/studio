@@ -30,7 +30,7 @@ export default function DashboardPage() {
   }, []);
 
   if (!isClient) {
-    return <div className="flex items-center justify-center h-full"><p>Yüklənir...</p></div>; // Or a proper loader
+    return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>; 
   }
 
   const totalProductTypes = products.length;
@@ -47,57 +47,57 @@ export default function DashboardPage() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <StatCard 
-          title="Ümumi Məhsul Növləri" 
+          title="Toplam Ürün Çeşidi" 
           value={totalProductTypes} 
           icon={Package} 
           link="/products"
-          description="Qeydiyyatdan keçmiş məhsul çeşidləri"
+          description="Kayıtlı ürün çeşitleri"
         />
         <StatCard 
-          title="Ümumi Stok Miqdarı" 
+          title="Toplam Stok Miktarı" 
           value={totalStockItems} 
           icon={Warehouse} 
           link="/inventory"
-          description="Bütün məhsulların cəmi stoku"
+          description="Tüm ürünlerin toplam stoku"
         />
         <StatCard 
-          title="BOM Siyahıları" 
+          title="Ürün Reçeteleri (BOM)" 
           value={totalBoms} 
           icon={ListChecks} 
           link="/boms"
-          description="Məhsul reseptlərinin sayı"
+          description="Ürün reçetelerinin sayısı"
         />
         <StatCard 
-          title="Xammal Girişləri" 
+          title="Hammadde Girişleri" 
           value={totalRawMaterialEntries} 
           icon={Truck} 
           link="/raw-material-entries"
-          description="Qeydə alınmış xammal daxilolmaları"
+          description="Kaydedilmiş hammadde girişleri"
         />
         <StatCard 
-          title="İstehsalat Qeydləri" 
+          title="Üretim Kayıtları" 
           value={totalProductionLogs} 
           icon={Factory} 
           link="/productions"
-          description="Tamamlanmış istehsal əməliyyatları"
+          description="Tamamlanmış üretim işlemleri"
         />
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>StokTakip Sistemine Xoş Gəlmisiniz!</CardTitle>
+          <CardTitle>StokTakip Sistemine Hoş Geldiniz!</CardTitle>
           <CardDescription>
-            Bu sistem vasitəsilə xammal, yarımməmul, məmul və köməkçi materiallarınızı effektiv şəkildə idarə edə bilərsiniz.
-            Naviqasiya menyusundan istədiyiniz bölməyə keçid edə bilərsiniz.
+            Bu sistem aracılığıyla hammadde, yarı mamul, mamul ve yardımcı malzemelerinizi etkin bir şekilde yönetebilirsiniz.
+            Navigasyon menüsünden istediğiniz bölüme geçiş yapabilirsiniz.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p>Əsas funksiyalar:</p>
+          <p>Temel fonksiyonlar:</p>
           <ul className="list-disc list-inside ml-4 mt-2 space-y-1 text-sm text-muted-foreground">
-            <li>Məhsul tanımlama və redaktə etmə</li>
-            <li>BOM (Material Siyahısı) yaratma və idarə etmə</li>
-            <li>Xammal girişlərini qeyd etmə</li>
-            <li>İstehsalat qeydləri ilə stokları avtomatik yeniləmə</li>
-            <li>Anlık stok səviyyələrini izləmə</li>
+            <li>Ürün tanımlama ve düzenleme</li>
+            <li>Ürün Reçetesi (Malzeme Listesi - BOM) oluşturma ve yönetme</li>
+            <li>Hammadde girişlerini kaydetme</li>
+            <li>Üretim kayıtları ile stokları otomatik güncelleme</li>
+            <li>Anlık stok seviyelerini izleme</li>
           </ul>
         </CardContent>
       </Card>

@@ -61,7 +61,7 @@ export function DataTable<TData, TValue>({
                   colSpan={columns.length}
                   className="h-24 text-center"
                 >
-                  Nəticə yoxdur.
+                  Sonuç bulunamadı.
                 </TableCell>
               </TableRow>
             )}
@@ -76,10 +76,10 @@ export function DataTable<TData, TValue>({
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
             disabled={currentPage === 1}
           >
-            Əvvəlki
+            Önceki
           </Button>
           <span className="text-sm">
-            Səhifə {currentPage} / {totalPages}
+            Sayfa {currentPage} / {totalPages}
           </span>
           <Button
             variant="outline"
@@ -87,7 +87,7 @@ export function DataTable<TData, TValue>({
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}
           >
-            Növbəti
+            Sonraki
           </Button>
         </div>
       )}

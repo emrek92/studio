@@ -29,17 +29,17 @@ export default function RawMaterialEntriesPage() {
 
 
   if (!isMounted) {
-    return <div className="flex items-center justify-center h-full"><p>Yüklənir...</p></div>;
+    return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;
   }
 
   return (
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Xammal Girişləri</h1>
+        <h1 className="text-3xl font-bold">Hammadde Girişleri</h1>
         <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
           <DialogTrigger asChild>
             <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Giriş Əlavə Et
+              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Giriş Ekle
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">

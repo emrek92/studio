@@ -5,21 +5,21 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 const productTypeLabels: Record<ProductType, string> = {
-  hammadde: "Xammal",
-  yari_mamul: "Yarım Məhsul",
-  mamul: "Məhsul",
-  yardimci_malzeme: "Köməkçi Material",
+  hammadde: "Hammadde",
+  yari_mamul: "Yarı Mamul",
+  mamul: "Mamul",
+  yardimci_malzeme: "Yardımcı Malzeme",
 };
 
 export const inventoryColumns = [
   {
     accessorKey: "name",
-    header: "Məhsul Adı",
+    header: "Ürün Adı",
     cell: ({ row }: { row: Product }) => <div className="font-medium">{row.name}</div>,
   },
   {
     accessorKey: "type",
-    header: "Növü",
+    header: "Türü",
     cell: ({ row }: { row: Product }) => (
       <Badge variant={
         row.type === 'mamul' ? 'default' : 
@@ -32,19 +32,19 @@ export const inventoryColumns = [
   },
   {
     accessorKey: "unit",
-    header: "Ölçü Vahidi",
+    header: "Ölçü Birimi",
     cell: ({ row }: { row: Product }) => row.unit,
   },
   {
     accessorKey: "stock",
-    header: () => <div className="text-right">Mövcud Stok</div>,
+    header: () => <div className="text-right">Mevcut Stok</div>,
     cell: ({ row }: { row: Product }) => {
       const stock = parseFloat(row.stock.toString());
-      const formattedStock = new Intl.NumberFormat("az-AZ").format(stock);
+      const formattedStock = new Intl.NumberFormat("tr-TR").format(stock);
       return (
         <div className={cn(
           "text-right font-semibold",
-          stock === 0 ? "text-destructive" : stock < 10 ? "text-orange-500" : "text-accent-foreground" // Using direct color here due to conditional styling, ideally use theme vars
+          stock === 0 ? "text-destructive" : stock < 10 ? "text-orange-500" : "text-accent-foreground" 
         )}>
           {formattedStock}
         </div>
@@ -53,7 +53,7 @@ export const inventoryColumns = [
   },
   {
     accessorKey: "description",
-    header: "Açıqlama",
+    header: "Açıklama",
     cell: ({ row }: { row: Product }) => <div className="text-sm text-muted-foreground truncate max-w-xs">{row.description || "-"}</div>,
   },
 ];

@@ -48,12 +48,11 @@ export default function BomsPage() {
 
   const handleDelete = () => {
     if (bomToDelete) {
-      // Check if BOM is used in production logs
       const isUsedInProduction = useStore.getState().productionLogs.some(log => log.bomId === bomToDelete);
       if (isUsedInProduction) {
          toast({
-          title: "Silinmə Xətası",
-          description: "Bu BOM bir və ya daha çox istehsal qeydində istifadə olunur. Əvvəlcə istehsal qeydlərini silin/dəyişdirin.",
+          title: "Silme Hatası",
+          description: "Bu Ürün Reçetesi (BOM) bir veya daha fazla üretim kaydında kullanılıyor. Lütfen önce üretim kayıtlarını silin/değiştirin.",
           variant: "destructive",
         });
         setBomToDelete(null);
@@ -61,7 +60,7 @@ export default function BomsPage() {
       }
 
       deleteBom(bomToDelete);
-      toast({ title: "BOM Silindi", description: "BOM uğurla silindi." });
+      toast({ title: "Ürün Reçetesi (BOM) Silindi", description: "Ürün Reçetesi (BOM) başarıyla silindi." });
       setBomToDelete(null);
     }
   };
@@ -69,20 +68,20 @@ export default function BomsPage() {
   const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
 
   if (!isMounted) {
-    return <div className="flex items-center justify-center h-full"><p>Yüklənir...</p></div>;
+    return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;
   }
 
   return (
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">BOM Siyahıları</h1>
+        <h1 className="text-3xl font-bold">Ürün Reçeteleri (BOM)</h1>
         <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
             setIsFormOpen(isOpen);
             if (!isOpen) setEditingBom(undefined);
         }}>
           <DialogTrigger asChild>
             <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Yeni BOM Yarat
+              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Ürün Reçetesi Oluştur
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
@@ -102,13 +101,13 @@ export default function BomsPage() {
         <AlertDialog open={!!bomToDelete} onOpenChange={() => setBomToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>BOM-u Silməyə Əminsiniz?</AlertDialogTitle>
+              <AlertDialogTitle>Ürün Reçetesini (BOM) Silmek İstediğinize Emin Misiniz?</AlertDialogTitle>
               <AlertDialogDescription>
-                Bu əməliyyat geri qaytarıla bilməz. Bu BOM bazadan həmişəlik silinəcək.
+                Bu işlem geri alınamaz. Bu Ürün Reçetesi (BOM) veritabanından kalıcı olarak silinecektir.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setBomToDelete(null)}>Ləğv Et</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => setBomToDelete(null)}>İptal Et</AlertDialogCancel>
               <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
                 Sil
               </AlertDialogAction>

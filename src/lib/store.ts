@@ -78,7 +78,7 @@ export const useStore = create<AppState>()(
       addProductionLog: (log) => {
         const bom = get().boms.find(b => b.id === log.bomId);
         if (!bom) {
-          console.error("BOM not found for production log");
+          console.error("Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı");
           // Potentially show a toast error to the user
           return; 
         }
@@ -86,13 +86,10 @@ export const useStore = create<AppState>()(
         let productsToUpdate = [...get().products];
         let possible = true;
 
-        // Check stock for components and prepare updates (without committing yet)
         const componentUpdates = bom.components.map(component => {
           const product = productsToUpdate.find(p => p.id === component.productId);
           if (!product || product.stock < component.quantity * log.quantity) {
             possible = false;
-            // console.warn(`Not enough stock for component ${product?.name || component.productId}`);
-            // Here you might throw an error or notify the user
           }
           return {
             productId: component.productId,
@@ -101,20 +98,16 @@ export const useStore = create<AppState>()(
         });
         
         if (!possible) {
-          // Use your toast system here
-          // Example: toast({ title: "Error", description: "Not enough stock for components.", variant: "destructive" });
-          alert("İstehsal üçün kifayət qədər komponent stoku yoxdur."); // Simple alert, replace with toast
+          alert("Üretim için yeterli bileşen stoğu bulunmamaktadır."); // Simple alert, replace with toast
           return; // Stop processing
         }
 
-        // Apply component stock deductions
         componentUpdates.forEach(update => {
           productsToUpdate = productsToUpdate.map(p => 
             p.id === update.productId ? { ...p, stock: update.newStock } : p
           );
         });
         
-        // Increase stock of the produced item
         productsToUpdate = productsToUpdate.map((p) =>
           p.id === log.productId ? { ...p, stock: p.stock + log.quantity } : p
         );
@@ -126,15 +119,14 @@ export const useStore = create<AppState>()(
       },
     }),
     {
-      name: 'stoktakip-storage', // name of the item in the storage (must be unique)
-      storage: createJSONStorage(() => localStorage), // (optional) by default, 'localStorage' is used
+      name: 'stoktakip-storage', 
+      storage: createJSONStorage(() => localStorage), 
     }
   )
 );
 
-// Helper function to get product name by ID
 export const getProductNameById = (productId: string): string => {
   const products = useStore.getState().products;
   const product = products.find(p => p.id === productId);
-  return product ? product.name : 'Unknown Product';
+  return product ? product.name : 'Bilinmeyen Ürün';
 };

@@ -25,22 +25,22 @@ export const siteConfig = {
     {
       title: "Stok Yönetimi",
       items: [
-        { title: "Məhsullar", href: "/products", icon: Package },
-        { title: "Stok Səviyyələri", href: "/inventory", icon: Warehouse },
+        { title: "Ürünler", href: "/products", icon: Package },
+        { title: "Stok Seviyeleri", href: "/inventory", icon: Warehouse },
       ],
     },
     {
-      title: "İstehsalat",
+      title: "Üretim",
       items: [
-        { title: "BOM Siyahıları", href: "/boms", icon: ListChecks },
-        { title: "Xammal Girişi", href: "/raw-material-entries", icon: Truck },
-        { title: "İstehsalat Qeydi", href: "/productions", icon: Factory },
+        { title: "Ürün Reçeteleri (BOM)", href: "/boms", icon: ListChecks },
+        { title: "Hammadde Girişi", href: "/raw-material-entries", icon: Truck },
+        { title: "Üretim Kaydı", href: "/productions", icon: Factory },
       ],
     },
     // {
     //   title: "Ayarlar",
     //   items: [
-    //     { title: "Ümumi Ayarlar", href: "/settings", icon: Settings },
+    //     { title: "Genel Ayarlar", href: "/settings", icon: Settings },
     //   ],
     // }
   ] as NavItemGroup[],

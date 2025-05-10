@@ -4,37 +4,37 @@ export interface Product {
   id: string;
   name: string;
   type: ProductType;
-  unit: string; // e.g., kg, adet, litre, metre
+  unit: string; // örn: kg, adet, litre, metre
   stock: number;
   description?: string;
 }
 
 export interface BomComponent {
-  productId: string; // ID of Hammadde or Yarı Mamul
+  productId: string; // Hammadde veya Yarı Mamul ID'si
   quantity: number;
 }
 
 export interface BOM {
   id: string;
-  productId: string; // ID of the Mamul this BOM is for
-  name: string; // Name of the BOM (e.g., "BOM for Product X")
+  productId: string; // Bu BOM'un ait olduğu Mamul ID'si
+  name: string; // BOM Adı (örn: "X Ürünü için BOM")
   components: BomComponent[];
 }
 
 export interface RawMaterialEntry {
   id: string;
-  productId: string; // ID of the Hammadde
+  productId: string; // Hammadde ID'si
   quantity: number;
-  date: string; // ISO date string
+  date: string; // ISO tarih formatı
   supplier?: string;
   notes?: string;
 }
 
 export interface ProductionLog {
   id: string;
-  productId: string; // ID of the Mamul produced
-  bomId: string; // ID of the BOM used
+  productId: string; // Üretilen Mamul ID'si
+  bomId: string; // Kullanılan BOM ID'si
   quantity: number;
-  date: string; // ISO date string
+  date: string; // ISO tarih formatı
   notes?: string;
 }

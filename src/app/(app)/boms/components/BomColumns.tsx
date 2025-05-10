@@ -2,7 +2,7 @@
 
 import type { BOM } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, List } from "lucide-react";
+import { Edit, Trash2, List, MoreHorizontal } from "lucide-react"; // Added MoreHorizontal
 import { getProductNameById } from "@/lib/store";
 import {
   DropdownMenu,
@@ -12,7 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DotsHorizontalIcon } from "@radix-ui/react-icons";
+// import { DotsHorizontalIcon } from "@radix-ui/react-icons"; // Removed
 import {
   Tooltip,
   TooltipContent,
@@ -29,17 +29,17 @@ interface BomColumnsProps {
 export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
   {
     accessorKey: "name",
-    header: "BOM Adı",
+    header: "Ürün Reçetesi Adı",
     cell: ({ row }: { row: BOM }) => <div className="font-medium">{row.name}</div>,
   },
   {
     accessorKey: "productName",
-    header: "Əsas Məhsul",
+    header: "Ana Ürün",
     cell: ({ row }: { row: BOM }) => getProductNameById(row.productId),
   },
   {
     accessorKey: "componentCount",
-    header: "Komponent Sayı",
+    header: "Bileşen Sayısı",
     cell: ({ row }: { row: BOM }) => {
       const count = row.components.length;
       const componentNames = row.components.map(c => `${getProductNameById(c.productId)}: ${c.quantity}`).join('\n');
@@ -54,7 +54,7 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
               </div>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs whitespace-pre-line text-sm bg-popover text-popover-foreground p-2 rounded-md shadow-lg border">
-              <p className="font-semibold mb-1">Komponentlər:</p>
+              <p className="font-semibold mb-1">Bileşenler:</p>
               {row.components.map(c => (
                 <div key={c.productId} className="text-xs">
                   {getProductNameById(c.productId)}: {c.quantity}
@@ -68,20 +68,20 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
   },
   {
     id: "actions",
-    header: "Əməliyyatlar",
+    header: "İşlemler",
     cell: ({ row }: { row: BOM }) => {
       return (
          <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-8 w-8 p-0">
-              <span className="sr-only">Menyu aç</span>
-              <DotsHorizontalIcon className="h-4 w-4" />
+              <span className="sr-only">Menüyü aç</span>
+              <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel>Əməliyyatlar</DropdownMenuLabel>
+            <DropdownMenuLabel>İşlemler</DropdownMenuLabel>
             <DropdownMenuItem onClick={() => onEdit(row)}>
-              <Edit className="mr-2 h-4 w-4" /> Redaktə Et
+              <Edit className="mr-2 h-4 w-4" /> Düzenle
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onDelete(row.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">

@@ -52,8 +52,8 @@ export default function ProductsPage() {
       const isUsedInBom = useStore.getState().boms.some(bom => bom.components.some(c => c.productId === productToDelete));
       if (isUsedInBom) {
         toast({
-          title: "Silinmə Xətası",
-          description: "Bu məhsul bir və ya daha çox BOM siyahısında istifadə olunur. Əvvəlcə BOM-lardan silin.",
+          title: "Silme Hatası",
+          description: "Bu ürün bir veya daha fazla Ürün Reçetesinde (BOM) kullanılmaktadır. Lütfen önce Ürün Reçetelerinden kaldırın.",
           variant: "destructive",
         });
         setProductToDelete(null);
@@ -61,7 +61,7 @@ export default function ProductsPage() {
       }
       
       deleteProduct(productToDelete);
-      toast({ title: "Məhsul Silindi", description: "Məhsul uğurla silindi." });
+      toast({ title: "Ürün Silindi", description: "Ürün başarıyla silindi." });
       setProductToDelete(null);
     }
   };
@@ -70,20 +70,20 @@ export default function ProductsPage() {
 
   if (!isMounted) {
     // To prevent hydration mismatch with zustand persisted state
-    return <div className="flex items-center justify-center h-full"><p>Yüklənir...</p></div>;
+    return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;
   }
 
   return (
     <div className="container mx-auto py-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Məhsullar</h1>
+        <h1 className="text-3xl font-bold">Ürünler</h1>
         <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
             setIsFormOpen(isOpen);
             if (!isOpen) setEditingProduct(undefined);
         }}>
           <DialogTrigger asChild>
             <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Məhsul Əlavə Et
+              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Ürün Ekle
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-md">
@@ -103,13 +103,13 @@ export default function ProductsPage() {
         <AlertDialog open={!!productToDelete} onOpenChange={() => setProductToDelete(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Məhsulu Silməyə Əminsiniz?</AlertDialogTitle>
+              <AlertDialogTitle>Ürünü Silmek İstediğinize Emin Misiniz?</AlertDialogTitle>
               <AlertDialogDescription>
-                Bu əməliyyat geri qaytarıla bilməz. Bu məhsul bazadan həmişəlik silinəcək.
+                Bu işlem geri alınamaz. Bu ürün veritabanından kalıcı olarak silinecektir.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setProductToDelete(null)}>Ləğv Et</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => setProductToDelete(null)}>İptal Et</AlertDialogCancel>
               <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
                 Sil
               </AlertDialogAction>
