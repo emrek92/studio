@@ -38,7 +38,7 @@ import {
 
 
 export default function ProductionLogsPage() {
-  const { productionLogs, products, boms, addProductionLog, deleteProductionLog } = useStore();
+  const { productionLogs, products, boms, addProductionLog, updateProductionLog, deleteProductionLog } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingLog, setEditingLog] = React.useState<ProductionLog | undefined>(undefined);
@@ -46,6 +46,7 @@ export default function ProductionLogsPage() {
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
   const { toast } = useToast();
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
+  const [showAll, setShowAll] = React.useState(true); // State to show all data initially
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -76,12 +77,15 @@ export default function ProductionLogsPage() {
 
 
   const logsToDisplay = React.useMemo(() => {
+    if (showAll) {
+      return [...productionLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }
+
     let filtered = [...productionLogs]; 
 
     if (dateRange?.from) {
       const rangeStart = new Date(dateRange.from);
       rangeStart.setHours(0, 0, 0, 0);
-      // If only 'from' is selected, 'to' might be undefined. Treat 'to' as the same day as 'from' in that case.
       const rangeEnd = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
       rangeEnd.setHours(23, 59, 59, 999);
 
@@ -89,22 +93,22 @@ export default function ProductionLogsPage() {
         const logDate = new Date(log.date);
         return logDate >= rangeStart && logDate <= rangeEnd;
       });
+    } else {
+        // If no date range is selected and not showing all, show no data.
+        return [];
     }
-    // If no dateRange or dateRange.from is undefined, all logs are shown.
-
     return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [productionLogs, dateRange]);
+  }, [productionLogs, dateRange, showAll]);
 
 
   const generateProductionLogTemplate = () => {
-    const headers = ["Üretilen Mamul Kodu*", "Üretilen Mamul Adı - Bilgilendirme", "Kullanılan Reçetenin Ana Ürün Kodu*", "Üretim Miktarı*", "Tarih (GG.AA.YYYY)*", "Notlar"];
-    const exampleRow = ["MAM-001", "Örnek Mamul A", "MAM-001", 50, "02.01.2024", "Günlük üretim"];
+    const headers = ["Üretilen Ürün Kodu (Mamul/Yarı Mamul)*", "Kullanılan Reçetenin Ana Ürün Kodu*", "Üretim Miktarı*", "Tarih (GG.AA.YYYY)*", "Notlar"];
+    const exampleRow = ["MAM-001", "MAM-001", 50, "02.01.2024", "Günlük üretim"];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Üretilen Mamul Kodu' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
-        ["- 'Üretilen Mamul Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
-        ["- 'Kullanılan Reçetenin Ana Ürün Kodu' sistemde kayıtlı ve bu mamule ait bir ürün reçetesinin ana ürün kodu olmalıdır."],
+        ["- 'Üretilen Ürün Kodu' sistemde kayıtlı bir 'mamul' veya 'yari_mamul' türünde ürünün kodu olmalıdır."],
+        ["- 'Kullanılan Reçetenin Ana Ürün Kodu', üretilen ürünün kendisine ait ve sistemde kayıtlı bir ürün reçetesinin ana ürün kodu olmalıdır (Genellikle üretilen ürün kodu ile aynıdır)."],
         ["- 'Üretim Miktarı' pozitif bir sayı olmalıdır."],
         ["- 'Tarih' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
     ];
@@ -128,9 +132,9 @@ export default function ProductionLogsPage() {
       const allBoms = useStore.getState().boms;
 
       const importSchema = z.object({
-        "Üretilen Mamul Kodu*": z.preprocess(
+        "Üretilen Ürün Kodu (Mamul/Yarı Mamul)*": z.preprocess(
           val => (typeof val === 'number' ? String(val) : val),
-          z.string().min(1, "Mamul ürün kodu zorunludur.")
+          z.string().min(1, "Üretilen ürün kodu zorunludur.")
         ),
         "Kullanılan Reçetenin Ana Ürün Kodu*": z.preprocess(
           val => (typeof val === 'number' ? String(val) : val),
@@ -145,16 +149,10 @@ export default function ProductionLogsPage() {
           if (typeof val === 'string') {
             const parsedDate = parse(val, "dd.MM.yyyy", new Date());
             if (isValid(parsedDate)) return parsedDate;
-             // Try another common format if the first fails
             const parsedDateAlt = parse(val, "d.M.yyyy", new Date());
             if (isValid(parsedDateAlt)) return parsedDateAlt;
           }
-          // Excel date number handling (simplified)
           if (typeof val === 'number') { 
-             // Excel stores dates as serial numbers. Day 1 is Jan 1, 1900.
-             // JavaScript's epoch is Jan 1, 1970.
-             // Number of days between 1/1/1900 and 1/1/1970 is 25569 (or 25567 if 1900 is not a leap year in Excel's logic, Excel incorrectly treats 1900 as a leap year)
-             // For dates after 1900-02-28, Excel date number is 2 days more than actual.
              const excelEpochDiff = val > 60 ? 25567 : 25569;
              const date = new Date((val - excelEpochDiff) * 24 * 60 * 60 * 1000);
              if (isValid(date)) return date;
@@ -174,10 +172,10 @@ export default function ProductionLogsPage() {
         if (validationResult.success) {
           const data = validationResult.data;
           
-          const producedProductCode = data["Üretilen Mamul Kodu*"];
+          const producedProductCode = data["Üretilen Ürün Kodu (Mamul/Yarı Mamul)*"];
           const producedProduct = findProductByCode(producedProductCode, allProducts);
-          if (!producedProduct || producedProduct.type !== 'mamul') {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' kodlu mamul ürün bulunamadı veya türü yanlış.`);
+          if (!producedProduct || (producedProduct.type !== 'mamul' && producedProduct.type !== 'yari_mamul')) {
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' kodlu mamul/yarı mamul ürün bulunamadı veya türü yanlış.`);
             errorCount++;
             continue;
           }
@@ -211,7 +209,7 @@ export default function ProductionLogsPage() {
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
-          errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Üretilen Mamul Kodu*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
+          errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Üretilen Ürün Kodu (Mamul/Yarı Mamul)*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
         }
       }
 
@@ -228,7 +226,10 @@ export default function ProductionLogsPage() {
       } else {
         toast({ title: "İçe Aktarma Tamamlandı", description: toastDescription });
       }
-      if(successCount > 0) setIsImportModalOpen(false);
+      if(successCount > 0) {
+        setIsImportModalOpen(false);
+        setShowAll(true); // Show all data after successful import
+      }
 
     } catch (error: any) {
       toast({ title: "İçe Aktarma Hatası", description: error.message || "Dosya işlenirken bir hata oluştu.", variant: "destructive" });
@@ -253,7 +254,7 @@ export default function ProductionLogsPage() {
               if (!isOpen) setEditingLog(undefined);
           }}>
             <DialogTrigger asChild>
-              <Button>
+              <Button onClick={() => setEditingLog(undefined)}>
                 <PlusCircle className="mr-2 h-4 w-4" /> Yeni Üretim Kaydı
               </Button>
             </DialogTrigger>
@@ -263,6 +264,7 @@ export default function ProductionLogsPage() {
                 onSuccess={() => {
                   setIsFormOpen(false);
                   setEditingLog(undefined);
+                  setShowAll(true); // Show all after successful add/edit
                 }}
               />
             </DialogContent>
@@ -270,7 +272,7 @@ export default function ProductionLogsPage() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 mb-4 py-4 border-y">
+      <div className="flex flex-wrap items-center gap-2 mb-4 py-4 border-y">
         <Label htmlFor="date-range-filter" className="text-sm font-medium">Tarih Aralığına Göre Filtrele:</Label>
         <Popover>
           <PopoverTrigger asChild>
@@ -278,12 +280,16 @@ export default function ProductionLogsPage() {
               id="date-range-filter"
               variant={"outline"}
               className={cn(
-                "w-[280px] justify-start text-left font-normal", // Adjusted width
-                !dateRange?.from && "text-muted-foreground"
+                "w-[280px] justify-start text-left font-normal", 
+                !dateRange?.from && "text-muted-foreground",
+                showAll && "border-dashed" 
               )}
+              disabled={showAll}
+              onClick={() => { if (showAll) setShowAll(false);}} // Auto-disable showAll when opening picker
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateRange?.from ? (
+              {showAll ? "Tüm kayıtlar gösteriliyor" :
+                dateRange?.from ? (
                 dateRange.to ? (
                   <>
                     {format(dateRange.from, "dd MMM, yyyy", { locale: tr })} -{" "}
@@ -303,19 +309,33 @@ export default function ProductionLogsPage() {
               mode="range"
               defaultMonth={dateRange?.from}
               selected={dateRange}
-              onSelect={setDateRange}
-              numberOfMonths={1} // Can be 1 or 2
+              onSelect={(range) => {
+                  setDateRange(range);
+                  if (range?.from) setShowAll(false); // if a date is selected, turn off showAll
+              }}
+              numberOfMonths={1} 
               locale={tr}
               disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
             />
           </PopoverContent>
         </Popover>
-        {(dateRange?.from) && (
-          <Button variant="ghost" size="sm" onClick={() => setDateRange(undefined)} className="text-muted-foreground hover:text-destructive">
+        {(!showAll && dateRange?.from) && (
+          <Button variant="ghost" size="sm" onClick={() => {setDateRange(undefined); setShowAll(true);}} className="text-muted-foreground hover:text-destructive">
             <XCircle className="mr-1 h-4 w-4" />
             Filtreyi Temizle
           </Button>
         )}
+         <Button 
+            variant={showAll ? "secondary" : "outline"} 
+            size="sm" 
+            onClick={() => {
+                setShowAll(true);
+                setDateRange(undefined);
+            }}
+            className="ml-auto"
+        >
+            Tümünü Göster
+        </Button>
       </div>
 
       <DataTable columns={columns} data={logsToDisplay} />
@@ -350,5 +370,3 @@ export default function ProductionLogsPage() {
     </div>
   );
 }
-
-    

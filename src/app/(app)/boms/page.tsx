@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { BomForm } from "./components/BomForm";
 import { getBomColumns } from "./components/BomColumns";
-import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
-import type { BOM, Product, BomComponent, ProductType } from "@/types";
+import { useStore } from "@/lib/store"; // Removed getProductNameById, getProductCodeById as they are available in useStore directly or via DataTable cell renderers
+import type { BOM, Product, BomComponent } from "@/types"; // Removed ProductType as it's part of Product
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -53,46 +53,42 @@ export default function BomsPage() {
 
   const handleDelete = () => {
     if (bomToDelete) {
-      const isUsedInProduction = useStore.getState().productionLogs.some(log => log.bomId === bomToDelete);
-      if (isUsedInProduction) {
+      try {
+        deleteBom(bomToDelete);
+        toast({ title: "Ürün Reçetesi (BOM) Silindi", description: "Ürün Reçetesi (BOM) başarıyla silindi." });
+      } catch (error: any) {
          toast({
           title: "Silme Hatası",
-          description: "Bu Ürün Reçetesi (BOM) bir veya daha fazla üretim kaydında kullanılıyor. Lütfen önce üretim kayıtlarını silin/değiştirin.",
+          description: error.message || "Ürün Reçetesi (BOM) silinirken bir hata oluştu.",
           variant: "destructive",
         });
-        setBomToDelete(null);
-        return;
       }
-
-      deleteBom(bomToDelete);
-      toast({ title: "Ürün Reçetesi (BOM) Silindi", description: "Ürün Reçetesi (BOM) başarıyla silindi." });
       setBomToDelete(null);
     }
   };
 
   const generateBomTemplate = () => {
-    const headers = ["Ana Mamul Ürün Kodu*", "Ana Mamul Adı (Bilgi)", "Bileşen Ürün Kodu*", "Bileşen Adı (Bilgi)", "Miktar*"];
+    const headers = ["Ana Ürün Kodu (Mamul/Yarı Mamul)*", "Bileşen Ürün Kodu (Hammadde/Yarı Mamul)*", "Bileşen Miktarı*"];
     const exampleRows = [
-        ["MAM-001", "Örnek Kırmızı Boyalı Kutu", "HAM-001", "Kırmızı Boya", 0.5],
-        ["MAM-001", "Örnek Kırmızı Boyalı Kutu", "YMM-001", "Karton Kutu", 1],
-        ["MAM-002", "Örnek Montajlı Ürün", "HAM-002", "Vida", 10],
-        ["MAM-002", "Örnek Montajlı Ürün", "YMM-002", "Metal Plaka", 2],
+        ["MAM-001", "HAM-001", 0.5],
+        ["MAM-001", "YMM-001", 1],
+        ["YMM-002", "HAM-002", 10],
+        ["YMM-002", "HAM-003", 2],
     ];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- Her satır, bir ana mamulün bir bileşenini tanımlar."],
-        ["- 'Ana Mamul Ürün Kodu' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
+        ["- Her satır, bir ana ürünün bir bileşenini tanımlar."],
+        ["- 'Ana Ürün Kodu' sistemde kayıtlı bir 'mamul' veya 'yari_mamul' türünde ürünün kodu olmalıdır."],
         ["- 'Bileşen Ürün Kodu' sistemde kayıtlı bir 'hammadde' veya 'yari_mamul' türünde ürünün kodu olmalıdır."],
-        ["- Bir ana mamul için birden fazla bileşen varsa, her bileşen için 'Ana Mamul Ürün Kodu' ve 'Ana Mamul Adı' tekrarlanmalıdır."],
-        ["- 'Ana Mamul Adı' ve 'Bileşen Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz (kodlar esastır)."],
-        ["- 'Miktar' pozitif bir sayı olmalıdır."],
-        ["- Bir ürün (ana mamul) kendi reçetesinde bileşen olarak kullanılamaz."],
+        ["- Bir ana ürün için birden fazla bileşen varsa, her bileşen için 'Ana Ürün Kodu' tekrarlanmalıdır."],
+        ["- 'Bileşen Miktarı' pozitif bir sayı olmalıdır."],
+        ["- Bir ürün (ana ürün) kendi reçetesinde bileşen olarak kullanılamaz."],
     ];
 
     downloadExcelTemplate([
       { sheetName: "UrunReceteleri", data: [headers, ...exampleRows, [], ...notes] },
-    ], "Urun_Recetesi_Tekli_Sablon");
+    ], "Urun_Recetesi_Sablonu");
   };
 
   const handleBomImport = async (file: File) => {
@@ -113,19 +109,16 @@ export default function BomsPage() {
       const existingBomsStore = useStore.getState().boms;
 
       const bomImportRowSchema = z.object({
-        "Ana Mamul Ürün Kodu*": z.string().min(1, "Ana mamul ürün kodu zorunludur."),
-        "Bileşen Ürün Kodu*": z.string().min(1, "Bileşen ürün kodu zorunludur."),
-        "Miktar*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
-        // "Ana Mamul Adı (Bilgi)": z.string().optional().nullable(), // For Zod, not strictly needed for processing if only code is used
-        // "Bileşen Adı (Bilgi)": z.string().optional().nullable(),
+        "Ana Ürün Kodu (Mamul/Yarı Mamul)*": z.string().min(1, "Ana ürün kodu zorunludur."),
+        "Bileşen Ürün Kodu (Hammadde/Yarı Mamul)*": z.string().min(1, "Bileşen ürün kodu zorunludur."),
+        "Bileşen Miktarı*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
       });
       
-      // Map to hold BOM data being constructed from the file: Key is mainProductCode
       const bomsFromFile: Map<string, { productId: string; name: string; components: BomComponent[], mainProductObject: Product }> = new Map();
 
       for (let i = 0; i < sheetData.length; i++) {
         const row = sheetData[i];
-        const rowIndex = i + 2; // For user-friendly error messages (1-based index, +1 for header)
+        const rowIndex = i + 2; 
 
         const validation = bomImportRowSchema.safeParse(row);
         if (!validation.success) {
@@ -134,13 +127,13 @@ export default function BomsPage() {
           continue;
         }
         
-        const mainProductCode = validation.data["Ana Mamul Ürün Kodu*"];
-        const componentProductCode = validation.data["Bileşen Ürün Kodu*"];
-        const quantity = validation.data["Miktar*"];
+        const mainProductCode = validation.data["Ana Ürün Kodu (Mamul/Yarı Mamul)*"];
+        const componentProductCode = validation.data["Bileşen Ürün Kodu (Hammadde/Yarı Mamul)*"];
+        const quantity = validation.data["Bileşen Miktarı*"];
 
         const mainProduct = findProductByCode(mainProductCode, allProducts);
-        if (!mainProduct || mainProduct.type !== 'mamul') {
-          errorMessages.push(`Satır ${rowIndex}: '${mainProductCode}' kodlu ana mamul ürün bulunamadı veya türü yanlış.`);
+        if (!mainProduct || (mainProduct.type !== 'mamul' && mainProduct.type !== 'yari_mamul')) {
+          errorMessages.push(`Satır ${rowIndex}: '${mainProductCode}' kodlu ana ürün (mamul/yarı mamul) bulunamadı veya türü yanlış.`);
           errorCount++;
           continue;
         }
@@ -153,28 +146,18 @@ export default function BomsPage() {
         }
 
         if (mainProduct.id === componentProduct.id) {
-            errorMessages.push(`Satır ${rowIndex}: Ana mamul ('${mainProductCode}') kendi reçetesinde bileşen olarak kullanılamaz.`);
+            errorMessages.push(`Satır ${rowIndex}: Ana ürün ('${mainProductCode}') kendi reçetesinde bileşen olarak kullanılamaz.`);
             errorCount++;
             continue;
         }
 
-        // Initialize BOM in map if not present
         if (!bomsFromFile.has(mainProductCode)) {
            if (existingBomsStore.some(b => b.productId === mainProduct.id)) {
-                errorMessages.push(`Satır ${rowIndex}: '${mainProductCode}' (${mainProduct.name}) için sistemde zaten bir ürün reçetesi mevcut. Dosyadan içe aktarma işlemi bu ürün için atlanacak.`);
-                // To prevent adding components to an existing BOM or creating a duplicate, we can skip further processing for this mainProductCode if it's already in the store.
-                // However, the current logic structure will process all lines from file for this mainProductCode.
-                // A better way might be to collect all components for a mainProductCode, and only then decide to add/reject the BOM.
-                // For now, we mark as error and potentially skip in final addBOM step.
-                // Let's refine: if it's in store, we don't add it from file.
-                 errorCount++; // Consider this an error if user tries to re-import existing.
-                 // We can use a set to track mainProductCodes that are already in store to skip them entirely
-                 // This check is now good here. If it's in the store, we don't want to process it from file.
-                 // However, we need to continue parsing the file for other BOMs.
-                 // A better approach would be to collect all lines for a specific mainProductCode and if it's already in store, skip all its lines.
-                 // The current loop processes line by line.
-                 // Alternative: build the bomsFromFile map, then filter out ones that exist in store before adding.
-                 // For now, this error message is a good first step.
+                errorMessages.push(`Satır ${rowIndex}: '${mainProductCode}' (${mainProduct.name}) için sistemde zaten bir ürün reçetesi mevcut. Bu ürün için içe aktarma atlanacak.`);
+                errorCount++;
+                // Mark this main product code to be skipped entirely later
+                bomsFromFile.set(mainProductCode, { productId: "SKIP", name: "SKIP", components:[], mainProductObject: mainProduct});
+                continue; 
             }
           bomsFromFile.set(mainProductCode, {
             productId: mainProduct.id,
@@ -186,32 +169,30 @@ export default function BomsPage() {
         
         const bomEntry = bomsFromFile.get(mainProductCode)!;
 
-        // If this BOM is for a product that already has a BOM in the store, we should skip adding components to it from the file
-        // This check is slightly redundant if we correctly skip existing BOMs above.
-        // If `bomsFromFile.has(mainProductCode)` was false, and then we checked `existingBomsStore`, and it was true,
-        // then `bomsFromFile.set` would not have happened for that `mainProductCode`.
-        // The current logic is: if not in map, check store. If in store, error. If not in store, add to map.
-        // So, if `bomEntry` exists, it means it wasn't in the store when first encountered in the file.
+        // If this main product is marked for skipping, don't add components
+        if (bomEntry.productId === "SKIP") {
+            continue;
+        }
+
 
         if (bomEntry.components.some(c => c.productId === componentProduct.id)) {
            errorMessages.push(`Satır ${rowIndex}: '${mainProductCode}' reçetesi için '${componentProductCode}' bileşeni dosyada birden fazla kez tanımlanmış. Yalnızca ilk tanım dikkate alınacak.`);
-           // Not necessarily an error that stops processing, but good to inform.
-           // Let's count it as an error to be strict for now.
            errorCount++;
-           continue; // Skip adding duplicate component
+           continue; 
         }
         bomEntry.components.push({ productId: componentProduct.id, quantity });
       }
       
-      // Step 3: Validate and add BOMs from the collected data
       for (const [mainCode, bomData] of bomsFromFile.entries()) {
-          // Check again if a BOM for this product already exists in the store, in case it was added between file parsing and this step (unlikely for client-side)
-          // or if the initial check logic needs reinforcement.
+          if (bomData.productId === "SKIP") { // Skip if marked due to pre-existing BOM in store
+              continue;
+          }
+
           if (existingBomsStore.some(b => b.productId === bomData.productId)) {
               if (!errorMessages.some(msg => msg.includes(`sistemde zaten bir ürün reçetesi mevcut`) && msg.includes(mainCode))) {
-                errorMessages.push(`'${mainCode}' (${bomData.mainProductObject.name}) için sistemde zaten bir ürün reçetesi mevcut olduğundan dosyadan aktarılmadı.`);
+                errorMessages.push(`'${mainCode}' (${bomData.mainProductObject.name}) için sistemde zaten bir ürün reçetesi mevcut olduğundan dosyadan aktarılmadı (dosya işlendikten sonra farkedildi).`);
               }
-              errorCount++; // Count as error as we are not importing it
+              errorCount++;
               continue;
           }
 
@@ -250,7 +231,7 @@ export default function BomsPage() {
   };
 
 
-  const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, handleEdit, handleDeleteConfirm]);
+  const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, handleEdit, handleDeleteConfirm]); // dependencies re-evaluated
 
   if (!isMounted) {
     return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;
@@ -311,10 +292,8 @@ export default function BomsPage() {
         entityName="Ürün Reçeteleri (BOM)"
         templateGenerator={generateBomTemplate}
         onImport={handleBomImport}
-        templateFileName="Urun_Recetesi_Tekli_Sablon.xlsx"
+        templateFileName="Urun_Recetesi_Sablonu.xlsx"
       />
     </div>
   );
 }
-
-    

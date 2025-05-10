@@ -54,7 +54,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   const { products, boms, addProductionLog, updateProductionLog } = useStore();
   const { toast } = useToast();
 
-  const finishedProducts = products.filter(p => p.type === 'mamul');
+  const producibleProducts = products.filter(p => p.type === 'mamul' || p.type === 'yari_mamul');
   
   const form = useForm<ProductionLogFormValues>({
     resolver: zodResolver(productionLogFormSchema),
@@ -63,7 +63,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
       : {
           productId: "",
           bomId: "",
-          quantity: 0,
+          quantity: 1, // Default to 1 instead of 0
           date: new Date(),
           notes: "",
         },
@@ -76,15 +76,21 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   }, [selectedProductId, boms]);
 
   React.useEffect(() => {
+    // If editing and the selected product and BOM are valid, do nothing
     if (log && log.productId === selectedProductId && availableBoms.find(b => b.id === log.bomId)) {
-       // Valid bomId already set
-    } else if (selectedProductId) {
+      // Current selection is valid for the log being edited
+    } 
+    // If a product is selected (either new form or product changed)
+    else if (selectedProductId) {
       const currentBomId = form.getValues("bomId");
+      // If the currently selected BOM is not valid for the new product, reset it
       if (!availableBoms.find(b => b.id === currentBomId)) {
-        form.setValue("bomId", ""); // Reset if current BOM is not valid for new product
+        form.setValue("bomId", ""); 
       }
-    } else {
-        form.setValue("bomId", ""); // No product selected, no BOM
+    } 
+    // If no product is selected, reset BOM
+    else {
+        form.setValue("bomId", ""); 
     }
   }, [selectedProductId, availableBoms, form, log]);
 
@@ -130,16 +136,18 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Üretilen Ürün (Mamul)</FormLabel>
+              <FormLabel>Üretilen Ürün (Mamul / Yarı Mamul)</FormLabel>
               <ProductCombobox
-                products={finishedProducts}
+                products={producibleProducts}
                 value={field.value}
                 onChange={(productId) => {
                   field.onChange(productId);
                   form.setValue("bomId", ""); // Reset BOM when product changes
                 }}
-                placeholder="Mamul seçin"
+                placeholder="Mamul veya Yarı Mamul seçin"
+                disabled={!!log} // Disable if editing
               />
+               {!!log && <p className="text-xs text-muted-foreground">Üretilen ürün düzenleme sırasında değiştirilemez.</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -151,7 +159,11 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Kullanılan Ürün Reçetesi (BOM)</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value} disabled={!selectedProductId || availableBoms.length === 0}>
+              <Select 
+                onValueChange={field.onChange} 
+                value={field.value} 
+                disabled={!selectedProductId || availableBoms.length === 0 || !!log} // Disable if editing
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder={!selectedProductId ? "Önce ürün seçin" : availableBoms.length === 0 ? "Bu ürün için Ürün Reçetesi (BOM) yok" : "Ürün Reçetesi (BOM) seçin"} />
@@ -165,6 +177,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                   ))}
                 </SelectContent>
               </Select>
+              {!!log && <p className="text-xs text-muted-foreground">Kullanılan ürün reçetesi düzenleme sırasında değiştirilemez.</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -177,7 +190,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
             <FormItem>
               <FormLabel>Üretim Miktarı</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="0" {...field} />
+                <Input type="number" placeholder="1" {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

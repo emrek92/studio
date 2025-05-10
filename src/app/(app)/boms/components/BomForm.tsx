@@ -14,7 +14,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
+import { useStore, getProductUnitById } from "@/lib/store";
 import type { BOM } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { PlusCircle, Trash2 } from "lucide-react";
@@ -43,7 +43,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
   const { products, addBom, updateBom } = useStore();
   const { toast } = useToast();
 
-  const finishedProducts = products.filter(p => p.type === 'mamul');
+  const mainProductOptions = products.filter(p => p.type === 'mamul' || p.type === 'yari_mamul');
   const componentProducts = products.filter(p => p.type === 'hammadde' || p.type === 'yari_mamul');
 
   const form = useForm<BomFormValues>({
@@ -68,6 +68,12 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           toast({ title: "Hata", description: "Ana ürün bulunamadı.", variant: "destructive" });
           return;
       }
+      // Check if any component is the same as the main product
+      if (data.components.some(comp => comp.productId === data.productId)) {
+        toast({ title: "Hata", description: "Ana ürün, kendi reçetesinde bileşen olarak kullanılamaz.", variant: "destructive" });
+        return;
+      }
+      
       const bomName = `${mainProduct.productCode} - ${mainProduct.name} Reçetesi`;
 
       if (bom) {
@@ -83,8 +89,8 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
         toast({ title: "Ürün Reçetesi (BOM) Eklendi", description: `${bomName} adlı Ürün Reçetesi (BOM) başarıyla eklendi.` });
       }
       onSuccess();
-    } catch (error) {
-      toast({ title: "Hata", description: "İşlem sırasında bir hata oluştu.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -104,12 +110,12 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Ana Ürün (Mamul)</FormLabel>
+              <FormLabel>Ana Ürün (Mamul / Yarı Mamul)</FormLabel>
               <ProductCombobox
-                products={finishedProducts}
+                products={mainProductOptions}
                 value={field.value}
                 onChange={field.onChange}
-                placeholder="Mamul seçin"
+                placeholder="Mamul veya Yarı Mamul seçin"
               />
               <FormMessage />
             </FormItem>
@@ -117,7 +123,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
         />
 
         <div>
-          <FormLabel>Bileşenler</FormLabel>
+          <FormLabel>Bileşenler (Hammadde / Yarı Mamul)</FormLabel>
           {fields.map((field, index) => (
             <div key={field.id} className="mt-2 space-y-2 p-3 border rounded-md relative">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -131,7 +137,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                         products={componentProducts}
                         value={componentField.value}
                         onChange={componentField.onChange}
-                        placeholder="Bileşen seçin"
+                        placeholder="Hammadde veya Yarı Mamul seçin"
                       />
                       <FormMessage />
                     </FormItem>
