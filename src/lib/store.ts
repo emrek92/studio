@@ -340,47 +340,39 @@ export const useStore = create<AppState>()(
         }));
       },
       deleteShipmentLog: (logId: string) => {
-        console.log("store.deleteShipmentLog called for ID:", logId); 
-
-        const initialShipmentLogs = get().shipmentLogs;
-        const initialProducts = get().products;
-
-        const logToDelete = initialShipmentLogs.find(l => l.id === logId);
-        console.log("Found logToDelete in store:", logToDelete); 
+        const logToDelete = get().shipmentLogs.find(l => l.id === logId);
 
         if (!logToDelete) {
-          console.error("Silinecek sevkiyat kaydı bulunamadı (store). ID:", logId);
+          // console.error("Silinecek sevkiyat kaydı bulunamadı (store). ID:", logId);
           throw new Error("Silinecek sevkiyat kaydı bulunamadı.");
         }
         
         set(state => {
-          console.log("Setting state in deleteShipmentLog. Current logs count:", state.shipmentLogs.length); 
           const updatedShipmentLogs = state.shipmentLogs.filter(l => l.id !== logId);
-          let updatedProducts = [...state.products]; 
+          let updatedProducts = state.products; // Default to current products
 
           const productToAdjust = state.products.find(p => p.id === logToDelete.productId);
-          console.log("Product to adjust in store (inside set):", productToAdjust);
 
           if (productToAdjust) {
-            const newStock = (productToAdjust.stock || 0) + logToDelete.quantity; 
-            console.log(`Adjusting stock for product ${productToAdjust.id}. Old stock: ${productToAdjust.stock}, Quantity to add back: ${logToDelete.quantity}, New stock: ${newStock}`);
+            const newStock = (productToAdjust.stock || 0) + logToDelete.quantity;
             updatedProducts = state.products.map(p =>
               p.id === logToDelete.productId
                 ? { ...p, stock: newStock }
                 : p
             );
           } else {
+            // This case should ideally be handled or prevented.
+            // For now, log a warning if product not found, but still delete the log.
             console.warn(
               `Sevkiyat (ID: ${logId}) silindi ancak ilişkili ürün (ID: ${logToDelete.productId}) bulunamadığı için stok güncellenemedi.`
             );
           }
-          console.log("New logs count after filter:", updatedShipmentLogs.length); 
+          
           return {
             shipmentLogs: updatedShipmentLogs,
             products: updatedProducts,
           };
         });
-        console.log("State update initiated in deleteShipmentLog");
       },
     }),
     {
