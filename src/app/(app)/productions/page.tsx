@@ -11,13 +11,20 @@ import {
 import { ProductionLogForm } from "./components/ProductionLogForm";
 import { productionLogColumns } from "./components/ProductionLogColumns";
 import { useStore } from "@/lib/store";
-import type { ProductionLog, Product, BOM } from "@/types";
+import type { ProductionLog } from "@/types";
 import { DataTable } from "@/components/DataTable";
-import { PlusCircle, UploadCloud } from "lucide-react";
+import { PlusCircle, UploadCloud, CalendarIcon, XCircle } from "lucide-react";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
 import { downloadExcelTemplate, parseExcelFile, findProductByCode, findBomIdByMainProductCode } from "@/lib/excelUtils";
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format, isValid, parse } from "date-fns";
+import { tr } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Label } from "@/components/ui/label";
+
 
 export default function ProductionLogsPage() {
   const { productionLogs, products, boms, addProductionLog } = useStore();
@@ -25,12 +32,29 @@ export default function ProductionLogsPage() {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
   const { toast } = useToast();
+  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
 
   React.useEffect(() => {
     setIsMounted(true);
   }, []);
 
   const columns = productionLogColumns;
+
+  const logsToDisplay = React.useMemo(() => {
+    if (!selectedDate) {
+      return []; 
+    }
+    return productionLogs
+      .filter(log => {
+        const logDate = new Date(log.date);
+        // Compare year, month, and day
+        return logDate.getFullYear() === selectedDate.getFullYear() &&
+               logDate.getMonth() === selectedDate.getMonth() &&
+               logDate.getDate() === selectedDate.getDate();
+      })
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [productionLogs, selectedDate]);
+
 
   const generateProductionLogTemplate = () => {
     const headers = ["Üretilen Mamul Kodu*", "Üretilen Mamul Adı - Bilgilendirme", "Kullanılan Reçetenin Ana Ürün Kodu*", "Üretim Miktarı*", "Tarih (GG.AA.YYYY)*", "Notlar"];
@@ -72,16 +96,35 @@ export default function ProductionLogsPage() {
           val => (typeof val === 'number' ? String(val) : val),
           z.string().min(1, "Reçete ana ürün kodu zorunludur.")
         ),
-        "Üretim Miktarı*": z.preprocess(val => Number(val), z.number().positive("Miktar pozitif olmalıdır.")),
-        "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
+        "Üretim Miktarı*": z.preprocess(val => {
+            const num = Number(val);
+            return isNaN(num) ? undefined : num;
+        }, z.number({invalid_type_error: "Üretim miktarı sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
+        "Tarih (GG.AA.YYYY)*": z.preprocess(val => {
+          if (val instanceof Date && isValid(val)) return val;
+          if (typeof val === 'string') {
+            const parsedDate = parse(val, "dd.MM.yyyy", new Date());
+            if (isValid(parsedDate)) return parsedDate;
+          }
+          if (typeof val === 'number') { // Excel date serial number
+            const excelEpoch = new Date(1899, 11, 30); // Excel epoch starts Dec 30, 1899 for Windows
+            const jsDate = new Date(excelEpoch.getTime() + val * 24 * 60 * 60 * 1000);
+            if (isValid(jsDate)) return jsDate;
+          }
+          return undefined; // Let Zod handle the error
+        }, z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir (GG.AA.YYYY)."}) })),
         "Notlar": z.string().optional().nullable(),
       });
       
       for (const row of sheet) {
         // Skip empty rows or rows that are likely headers/notes based on fewer expected values
-        if (Object.values(row).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length < 3) { 
+        const nonEmptyCellCount = Object.values(row).filter(v => v !== null && v !== undefined && String(v).trim() !== '').length;
+        if (nonEmptyCellCount === 0) continue; // Skip completely empty rows
+        if (nonEmptyCellCount < 3 && sheet.indexOf(row) > 0) { // Heuristic for notes/instruction rows, skip if not the first potential header
+            // Potentially a note row, we might log it or ignore it. For now, ignore.
             continue;
         }
+
 
         const validationResult = importSchema.safeParse(row);
         if (validationResult.success) {
@@ -105,7 +148,6 @@ export default function ProductionLogsPage() {
             continue;
           }
 
-          // Preliminary stock check for components (actual check is in addProductionLog)
           let canProduce = true;
           for (const component of bom.components) {
             const componentProduct = allProducts.find(p => p.id === component.productId);
@@ -134,7 +176,9 @@ export default function ProductionLogsPage() {
           if (useStore.getState().productionLogs.length > initialLogCount) {
             successCount++;
           } else {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) üretimi yapılamadı (muhtemelen stok yetersiz).`);
+            // This case should ideally be caught by the canProduce check or the store's internal logic
+            const mainProductName = findProductByCode(producedProductCode, allProducts)?.name || producedProductCode;
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${mainProductName}' üretimi yapılamadı (muhtemelen stok yetersiz veya başka bir sorun).`);
             errorCount++;
           }
 
@@ -150,9 +194,9 @@ export default function ProductionLogsPage() {
         description += ` ${errorCount} kayıtta hata oluştu.`;
         console.error("İçe aktarma hataları:", errorMessages.join("\n"));
         toast({
-            title: "Kısmi İçe Aktarma Tamamlandı",
+            title: errorCount > 0 && successCount > 0 ? "Kısmi İçe Aktarma Tamamlandı" : "İçe Aktarma Başarısız",
             description: `${description}\nDetaylar için konsolu kontrol edin.`,
-            variant: "default",
+            variant: errorCount > 0 && successCount === 0 ? "destructive" : "default",
             duration: 10000,
          });
       } else {
@@ -194,7 +238,43 @@ export default function ProductionLogsPage() {
           </Dialog>
         </div>
       </div>
-      <DataTable columns={columns} data={productionLogs.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())} />
+
+      <div className="flex items-center gap-2 mb-4 py-4 border-y">
+        <Label htmlFor="date-filter" className="text-sm font-medium">Tarihe Göre Filtrele:</Label>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              id="date-filter"
+              variant={"outline"}
+              className={cn(
+                "w-[240px] justify-start text-left font-normal",
+                !selectedDate && "text-muted-foreground"
+              )}
+            >
+              <CalendarIcon className="mr-2 h-4 w-4" />
+              {selectedDate ? format(selectedDate, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={selectedDate}
+              onSelect={setSelectedDate}
+              initialFocus
+              locale={tr}
+            />
+          </PopoverContent>
+        </Popover>
+        {selectedDate && (
+          <Button variant="ghost" size="sm" onClick={() => setSelectedDate(undefined)} className="text-muted-foreground hover:text-destructive">
+            <XCircle className="mr-1 h-4 w-4" />
+            Filtreyi Temizle
+          </Button>
+        )}
+      </div>
+
+      <DataTable columns={columns} data={logsToDisplay} />
+      
       <ExcelImportDialog
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
@@ -206,3 +286,4 @@ export default function ProductionLogsPage() {
     </div>
   );
 }
+
