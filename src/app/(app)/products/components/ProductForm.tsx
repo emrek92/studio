@@ -33,7 +33,7 @@ const productTypes: { value: ProductType; label: string }[] = [
   { value: "yardimci_malzeme", label: "Yardımcı Malzeme" },
 ];
 
-const productFormSchema = z.object({
+export const productFormSchema = z.object({
   name: z.string().min(2, { message: "Ürün adı en az 2 karakter olmalıdır." }),
   type: z.enum(["hammadde", "yari_mamul", "mamul", "yardimci_malzeme"], {
     required_error: "Ürün türü seçilmelidir.",

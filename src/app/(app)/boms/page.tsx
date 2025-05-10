@@ -9,10 +9,10 @@ import {
 } from "@/components/ui/dialog";
 import { BomForm } from "./components/BomForm";
 import { getBomColumns } from "./components/BomColumns";
-import { useStore } from "@/lib/store";
-import type { BOM } from "@/types";
+import { useStore, getProductNameById } from "@/lib/store";
+import type { BOM, Product, BomComponent, ProductType } from "@/types";
 import { DataTable } from "@/components/DataTable";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, UploadCloud } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
@@ -24,14 +24,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ExcelImportDialog } from "@/components/ExcelImportDialog";
+import { downloadExcelTemplate, parseExcelFile, findProductIdByName } from "@/lib/excelUtils";
+import * as z from "zod";
 
 export default function BomsPage() {
-  const { boms, deleteBom } = useStore();
+  const { products, boms, deleteBom, addBom } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingBom, setEditingBom] = React.useState<BOM | undefined>(undefined);
   const [bomToDelete, setBomToDelete] = React.useState<string | null>(null);
   const { toast } = useToast();
+  const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -65,6 +69,150 @@ export default function BomsPage() {
     }
   };
 
+  const generateBomTemplate = () => {
+    const bomHeaders = ["Ana Ürün Adı (Mamul)*"];
+    const bomExample = ["Örnek Mamul A"];
+    const bomNotes = [
+        ["Notlar (Ürün Reçeteleri Sayfası):"],
+        ["- * ile işaretli alanlar zorunludur."],
+        ["- 'Ana Ürün Adı (Mamul)' sistemde kayıtlı bir 'mamul' türünde ürün olmalıdır."],
+        ["- Her satır yeni bir ürün reçetesi tanımlar."]
+    ];
+
+    const componentHeaders = ["Ana Ürün Adı (Reçete Sahibi)*", "Bileşen Ürün Adı*", "Miktar*"];
+    const componentExample = ["Örnek Mamul A", "Örnek Hammadde X", 2.5];
+    const componentNotes = [
+        ["Notlar (Reçete Bileşenleri Sayfası):"],
+        ["- * ile işaretli alanlar zorunludur."],
+        ["- 'Ana Ürün Adı (Reçete Sahibi)' Ürün Reçeteleri sayfasında tanımlanmış bir ana ürün adı olmalıdır."],
+        ["- 'Bileşen Ürün Adı' sistemde kayıtlı bir 'hammadde' veya 'yari_mamul' türünde ürün olmalıdır."],
+        ["- 'Miktar' pozitif bir sayı olmalıdır."]
+    ];
+
+    downloadExcelTemplate([
+      { sheetName: "UrunReceteleri", data: [bomHeaders, bomExample, [], ...bomNotes] },
+      { sheetName: "ReceteBilesenleri", data: [componentHeaders, componentExample, [], ...componentNotes] }
+    ], "Urun_Recetesi_Sablonu");
+  };
+
+  const handleBomImport = async (file: File) => {
+    try {
+      const parsedData = await parseExcelFile(file);
+      const bomsSheet = parsedData["UrunReceteleri"];
+      const componentsSheet = parsedData["ReceteBilesenleri"];
+
+      if (!bomsSheet || !componentsSheet) {
+        toast({ title: "İçe Aktarma Hatası", description: "Excel dosyasında 'UrunReceteleri' veya 'ReceteBilesenleri' sayfası bulunamadı.", variant: "destructive" });
+        return;
+      }
+
+      let successCount = 0;
+      let errorCount = 0;
+      const errorMessages: string[] = [];
+      const importedBoms: BOM[] = [];
+      const allProducts = useStore.getState().products;
+      const existingBoms = useStore.getState().boms;
+
+      const bomSchema = z.object({ "Ana Ürün Adı (Mamul)*": z.string().min(1) });
+      const componentSchema = z.object({
+        "Ana Ürün Adı (Reçete Sahibi)*": z.string().min(1),
+        "Bileşen Ürün Adı*": z.string().min(1),
+        "Miktar*": z.preprocess(val => Number(val), z.number().positive()),
+      });
+
+      // Step 1: Process BOMs sheet
+      for (const row of bomsSheet) {
+        const bomValidation = bomSchema.safeParse(row);
+        if (!bomValidation.success) {
+          errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: Geçersiz veri - ${bomValidation.error.errors.map(e => e.message).join(', ')}`);
+          errorCount++;
+          continue;
+        }
+        
+        const mainProductName = bomValidation.data["Ana Ürün Adı (Mamul)*"];
+        const mainProduct = allProducts.find(p => p.name.toLowerCase().trim() === mainProductName.toLowerCase().trim() && p.type === 'mamul');
+
+        if (!mainProduct) {
+          errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductName}' adlı mamul ürün bulunamadı veya türü yanlış.`);
+          errorCount++;
+          continue;
+        }
+
+        if (existingBoms.some(b => b.productId === mainProduct.id) || importedBoms.some(b => b.productId === mainProduct.id)) {
+            errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductName}' için zaten bir reçete mevcut veya dosyada tekrar ediyor.`);
+            errorCount++;
+            continue;
+        }
+
+        importedBoms.push({
+          id: crypto.randomUUID(),
+          productId: mainProduct.id,
+          name: `${mainProduct.name} Reçetesi`,
+          components: [],
+        });
+      }
+
+      // Step 2: Process Components sheet
+      for (const row of componentsSheet) {
+        const compValidation = componentSchema.safeParse(row);
+        if (!compValidation.success) {
+          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: Geçersiz veri - ${compValidation.error.errors.map(e => e.message).join(', ')}`);
+          errorCount++;
+          continue;
+        }
+
+        const bomOwnerName = compValidation.data["Ana Ürün Adı (Reçete Sahibi)*"];
+        const componentProductName = compValidation.data["Bileşen Ürün Adı*"];
+        const quantity = compValidation.data["Miktar*"];
+
+        const targetBom = importedBoms.find(b => getProductNameById(b.productId).toLowerCase().trim() === bomOwnerName.toLowerCase().trim());
+        if (!targetBom) {
+          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${bomOwnerName}' adlı ana ürüne sahip reçete bulunamadı (önce UrunReceteleri sayfasında tanımlanmalı).`);
+          errorCount++;
+          continue;
+        }
+
+        const componentProduct = allProducts.find(p => p.name.toLowerCase().trim() === componentProductName.toLowerCase().trim() && (p.type === 'hammadde' || p.type === 'yari_mamul'));
+        if (!componentProduct) {
+          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${componentProductName}' adlı hammadde/yarı mamul ürün bulunamadı veya türü yanlış.`);
+          errorCount++;
+          continue;
+        }
+        
+        if (targetBom.productId === componentProduct.id) {
+            errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: Ana ürün ('${bomOwnerName}') kendi reçetesinde bileşen olarak kullanılamaz.`);
+            errorCount++;
+            continue;
+        }
+
+        targetBom.components.push({ productId: componentProduct.id, quantity });
+      }
+      
+      // Step 3: Validate and add BOMs
+      for(const bomToAdd of importedBoms) {
+          if (bomToAdd.components.length === 0) {
+              errorMessages.push(`'${getProductNameById(bomToAdd.productId)}' adlı reçete için hiç bileşen tanımlanmamış.`);
+              errorCount++;
+              continue;
+          }
+          addBom(bomToAdd);
+          successCount++;
+      }
+
+      let description = `${successCount} Ürün Reçetesi (BOM) başarıyla içe aktarıldı.`;
+      if (errorCount > 0) {
+        description += ` ${errorCount} kayıtta hata oluştu.`;
+        console.error("İçe aktarma hataları:", errorMessages);
+      }
+      toast({ title: "İçe Aktarma Tamamlandı", description });
+      if(successCount > 0) setIsImportModalOpen(false);
+
+    } catch (error: any) {
+      toast({ title: "İçe Aktarma Hatası", description: error.message || "Dosya işlenirken bir hata oluştu.", variant: "destructive" });
+    }
+  };
+
+
   const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
 
   if (!isMounted) {
@@ -73,27 +221,32 @@ export default function BomsPage() {
 
   return (
     <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-2">
         <h1 className="text-3xl font-bold">Ürün Reçeteleri (BOM)</h1>
-        <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
-            setIsFormOpen(isOpen);
-            if (!isOpen) setEditingBom(undefined);
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Yeni Ürün Reçetesi Oluştur
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <BomForm
-              bom={editingBom}
-              onSuccess={() => {
-                setIsFormOpen(false);
-                setEditingBom(undefined);
-              }}
-            />
-          </DialogContent>
-        </Dialog>
+        <div className="flex gap-2">
+          <Button onClick={() => setIsImportModalOpen(true)} variant="outline">
+            <UploadCloud className="mr-2 h-4 w-4" /> Excel'den İçe Aktar
+          </Button>
+          <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
+              setIsFormOpen(isOpen);
+              if (!isOpen) setEditingBom(undefined);
+          }}>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusCircle className="mr-2 h-4 w-4" /> Yeni Ürün Reçetesi Oluştur
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <BomForm
+                bom={editingBom}
+                onSuccess={() => {
+                  setIsFormOpen(false);
+                  setEditingBom(undefined);
+                }}
+              />
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
       <DataTable columns={columns} data={boms} />
 
@@ -115,6 +268,14 @@ export default function BomsPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+      <ExcelImportDialog
+        open={isImportModalOpen}
+        onOpenChange={setIsImportModalOpen}
+        entityName="Ürün Reçeteleri (BOM)"
+        templateGenerator={generateBomTemplate}
+        onImport={handleBomImport}
+        templateFileName="Urun_Recetesi_Sablonu.xlsx"
+      />
     </div>
   );
 }

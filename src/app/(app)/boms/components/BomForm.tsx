@@ -21,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useStore, getProductNameById } from "@/lib/store";
-import type { BOM, BomComponent, Product } from "@/types";
+import type { BOM } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -34,7 +34,7 @@ const bomComponentSchema = z.object({
 
 const bomFormSchema = z.object({
   productId: z.string().min(1, "Ana ürün seçilmelidir."),
-  name: z.string().min(2, "Ürün Reçetesi (BOM) adı en az 2 karakter olmalıdır."),
+  // name: z.string().min(2, "Ürün Reçetesi (BOM) adı en az 2 karakter olmalıdır."), // Removed
   components: z.array(bomComponentSchema).min(1, "En az bir bileşen eklenmelidir."),
 });
 
@@ -54,11 +54,13 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
 
   const form = useForm<BomFormValues>({
     resolver: zodResolver(bomFormSchema),
-    defaultValues: bom || {
-      productId: "",
-      name: "",
-      components: [{ productId: "", quantity: 1 }],
-    },
+    defaultValues: bom 
+      ? { productId: bom.productId, components: bom.components } 
+      : {
+          productId: "",
+          // name: "", // Removed
+          components: [{ productId: "", quantity: 1 }],
+        },
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -68,16 +70,20 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
 
   function onSubmit(data: BomFormValues) {
     try {
+      const mainProductName = getProductNameById(data.productId);
+      const bomName = `${mainProductName} Reçetesi`;
+
       if (bom) {
-        updateBom({ ...bom, ...data });
-        toast({ title: "Ürün Reçetesi (BOM) Güncellendi", description: `${data.name} adlı Ürün Reçetesi (BOM) başarıyla güncellendi.` });
+        updateBom({ ...bom, ...data, name: bomName });
+        toast({ title: "Ürün Reçetesi (BOM) Güncellendi", description: `${bomName} adlı Ürün Reçetesi (BOM) başarıyla güncellendi.` });
       } else {
         const newBom: BOM = {
           id: crypto.randomUUID(),
           ...data,
+          name: bomName, // Auto-generated name
         };
         addBom(newBom);
-        toast({ title: "Ürün Reçetesi (BOM) Eklendi", description: `${data.name} adlı Ürün Reçetesi (BOM) başarıyla eklendi.` });
+        toast({ title: "Ürün Reçetesi (BOM) Eklendi", description: `${bomName} adlı Ürün Reçetesi (BOM) başarıyla eklendi.` });
       }
       onSuccess();
     } catch (error) {
@@ -121,19 +127,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Ürün Reçetesi (BOM) Adı</FormLabel>
-              <FormControl>
-                <Input placeholder="Örn: Standart Ürün A Reçetesi" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Removed BOM Name FormField */}
 
         <div>
           <FormLabel>Bileşenler</FormLabel>
