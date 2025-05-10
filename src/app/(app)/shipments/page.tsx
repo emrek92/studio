@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from "react";
@@ -12,12 +11,11 @@ import {
 import { ShipmentLogForm } from "./components/ShipmentLogForm";
 import { getShipmentLogColumns } from "./components/ShipmentLogColumns";
 import { useStore, getCustomerOrderDisplayInfoById } from "@/lib/store";
-import { findProductByCode, downloadExcelTemplate, parseExcelFile as parseExcelFileUtil } from "@/lib/excelUtils"; // Corrected import
+import { findProductByCode, downloadExcelTemplate, parseExcelFile as parseExcelFileUtil } from "@/lib/excelUtils";
 import type { ShipmentLog } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud, CalendarIcon, XCircle } from "lucide-react";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-// import { downloadExcelTemplate, parseExcelFile as parseExcelFileUtil } from "@/lib/excelUtils"; // Renamed to avoid conflict - ALREADY CORRECTED ABOVE
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -62,18 +60,22 @@ export default function ShipmentsPage() {
   };
 
   const handleDelete = () => {
+    console.log("handleDelete called. logToDelete ID:", logToDelete); 
     if (logToDelete) {
       try {
-        deleteShipmentLog(logToDelete);
+        deleteShipmentLog(logToDelete); 
         toast({ title: "Sevkiyat Kaydı Silindi", description: "Sevkiyat kaydı başarıyla silindi." });
       } catch (error: any) {
+        console.error("Error during handleDelete:", error); 
         toast({ title: "Silme Hatası", description: error.message || "Kayıt silinirken bir hata oluştu.", variant: "destructive" });
       }
       setLogToDelete(null);
+    } else {
+      console.warn("handleDelete called but logToDelete is null.");
     }
   };
 
-  const columns = React.useMemo(() => getShipmentLogColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
+  const columns = React.useMemo(() => getShipmentLogColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, customerOrders, handleEdit, handleDeleteConfirm]);
 
 
   const logsToDisplay = React.useMemo(() => {
@@ -167,11 +169,15 @@ export default function ShipmentsPage() {
             continue;
           }
 
-          const customerOrderId = data["Müşteri Sipariş ID (Opsiyonel)"]?.trim();
-          if (customerOrderId && !allCustomerOrders.find(co => co.id === customerOrderId)) {
-             errorMessages.push(`Satır ${rowIndex}: '${customerOrderId}' ID'li müşteri siparişi bulunamadı.`);
-             errorCount++;
-             continue;
+          const customerOrderIdExcel = data["Müşteri Sipariş ID (Opsiyonel)"];
+          let customerOrderId: string | undefined = undefined;
+          if (customerOrderIdExcel && String(customerOrderIdExcel).trim() !== "") {
+              customerOrderId = String(customerOrderIdExcel).trim();
+              if (!allCustomerOrders.find(co => co.id === customerOrderId)) {
+                  errorMessages.push(`Satır ${rowIndex}: '${customerOrderId}' ID'li müşteri siparişi bulunamadı.`);
+                  errorCount++;
+                  continue;
+              }
           }
           
           try {
@@ -180,7 +186,7 @@ export default function ShipmentsPage() {
               productId: product.id,
               quantity: data["Miktar*"],
               date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
-              customerOrderId: customerOrderId || undefined,
+              customerOrderId: customerOrderId,
               notes: data["Notlar"] || undefined,
             };
             addShipmentLog(newLog);
@@ -332,4 +338,3 @@ export default function ShipmentsPage() {
     </div>
   );
 }
-

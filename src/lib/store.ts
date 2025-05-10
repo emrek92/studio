@@ -91,7 +91,7 @@ export const useStore = create<AppState>()(
         set((state) => ({
           rawMaterialEntries: [...state.rawMaterialEntries, entry],
           products: state.products.map((p) =>
-            p.id === entry.productId ? { ...p, stock: p.stock + entry.quantity } : p
+            p.id === entry.productId ? { ...p, stock: (p.stock || 0) + entry.quantity } : p
           ),
         }));
       },
@@ -110,7 +110,7 @@ export const useStore = create<AppState>()(
             e.id === updatedEntry.id ? updatedEntry : e
           ),
           products: state.products.map((p) =>
-            p.id === updatedEntry.productId ? { ...p, stock: p.stock + stockAdjustment } : p
+            p.id === updatedEntry.productId ? { ...p, stock: (p.stock || 0) + stockAdjustment } : p
           ),
         }));
       },
@@ -123,7 +123,7 @@ export const useStore = create<AppState>()(
         set((state) => ({
           rawMaterialEntries: state.rawMaterialEntries.filter((e) => e.id !== entryId),
           products: state.products.map((p) =>
-            p.id === entryToDelete.productId ? { ...p, stock: p.stock + stockAdjustment } : p
+            p.id === entryToDelete.productId ? { ...p, stock: (p.stock || 0) + stockAdjustment } : p
           ),
         }));
       },
@@ -144,13 +144,13 @@ export const useStore = create<AppState>()(
 
         const componentUpdates = bom.components.map(component => {
           const product = productsToUpdate.find(p => p.id === component.productId);
-          if (!product || product.stock < component.quantity * log.quantity) {
+          if (!product || (product.stock || 0) < component.quantity * log.quantity) {
             possible = false;
             insufficientComponentName = product ? `${product.productCode} - ${product.name}` : `ID: ${component.productId}`;
           }
           return {
             productId: component.productId,
-            newStock: product ? product.stock - (component.quantity * log.quantity) : 0,
+            newStock: product ? (product.stock || 0) - (component.quantity * log.quantity) : 0,
           };
         });
         
@@ -167,7 +167,7 @@ export const useStore = create<AppState>()(
         });
         
         productsToUpdate = productsToUpdate.map((p) =>
-          p.id === log.productId ? { ...p, stock: p.stock + log.quantity } : p
+          p.id === log.productId ? { ...p, stock: (p.stock || 0) + log.quantity } : p
         );
 
         set({
@@ -191,14 +191,14 @@ export const useStore = create<AppState>()(
         let tempProducts = [...products];
         tempProducts = tempProducts.map(p => {
           if (p.id === oldLog.productId) {
-            return { ...p, stock: p.stock - oldLog.quantity };
+            return { ...p, stock: (p.stock || 0) - oldLog.quantity };
           }
           return p;
         });
         oldBom.components.forEach(comp => {
           tempProducts = tempProducts.map(p => {
             if (p.id === comp.productId) {
-              return { ...p, stock: p.stock + (comp.quantity * oldLog.quantity) };
+              return { ...p, stock: (p.stock || 0) + (comp.quantity * oldLog.quantity) };
             }
             return p;
           });
@@ -213,7 +213,7 @@ export const useStore = create<AppState>()(
         let insufficientComponentName = '';
         newBom.components.forEach(comp => {
           const product = tempProducts.find(p => p.id === comp.productId);
-          if (!product || product.stock < comp.quantity * updatedLog.quantity) {
+          if (!product || (product.stock || 0) < comp.quantity * updatedLog.quantity) {
             possible = false;
             insufficientComponentName = product ? `${product.productCode} - ${product.name}` : `ID: ${comp.productId}`;
           }
@@ -227,14 +227,14 @@ export const useStore = create<AppState>()(
         newBom.components.forEach(comp => {
           finalProducts = finalProducts.map(p => {
             if (p.id === comp.productId) {
-              return { ...p, stock: p.stock - (comp.quantity * updatedLog.quantity) };
+              return { ...p, stock: (p.stock || 0) - (comp.quantity * updatedLog.quantity) };
             }
             return p;
           });
         });
         finalProducts = finalProducts.map(p => {
           if (p.id === updatedLog.productId) {
-            return { ...p, stock: p.stock + updatedLog.quantity };
+            return { ...p, stock: (p.stock || 0) + updatedLog.quantity };
           }
           return p;
         });
@@ -261,14 +261,14 @@ export const useStore = create<AppState>()(
         bomUsed.components.forEach(comp => {
           updatedProducts = updatedProducts.map(p => {
             if (p.id === comp.productId) {
-              return { ...p, stock: p.stock + (comp.quantity * logToDelete.quantity) };
+              return { ...p, stock: (p.stock || 0) + (comp.quantity * logToDelete.quantity) };
             }
             return p;
           });
         });
         updatedProducts = updatedProducts.map(p => {
           if (p.id === logToDelete.productId) {
-            return { ...p, stock: p.stock - logToDelete.quantity };
+            return { ...p, stock: (p.stock || 0) - logToDelete.quantity };
           }
           return p;
         });
@@ -299,13 +299,13 @@ export const useStore = create<AppState>()(
         if (!product) {
           throw new Error(`Sevk edilecek ürün (ID: ${log.productId}) bulunamadı.`);
         }
-        if (product.stock < log.quantity) {
-          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için ${log.quantity} adet sevk edilemez. Mevcut stok: ${product.stock}.`);
+        if ((product.stock || 0) < log.quantity) {
+          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için ${log.quantity} adet sevk edilemez. Mevcut stok: ${product.stock || 0}.`);
         }
         set((state) => ({
           shipmentLogs: [...state.shipmentLogs, log],
           products: state.products.map((p) =>
-            p.id === log.productId ? { ...p, stock: p.stock - log.quantity } : p
+            p.id === log.productId ? { ...p, stock: (p.stock || 0) - log.quantity } : p
           ),
         }));
       },
@@ -316,7 +316,6 @@ export const useStore = create<AppState>()(
         if (!oldLog) {
           throw new Error("Güncellenecek sevkiyat kaydı bulunamadı.");
         }
-        // Product ID cannot change during update for simplicity
         if (oldLog.productId !== updatedLog.productId) {
           throw new Error("Sevkiyat kaydı güncellenirken ürün ID'si değiştirilemez. Lütfen mevcut kaydı silip yeni bir kayıt oluşturun.");
         }
@@ -326,11 +325,11 @@ export const useStore = create<AppState>()(
           throw new Error(`Sevk edilen ürün (ID: ${updatedLog.productId}) bulunamadı.`);
         }
 
-        const quantityChange = updatedLog.quantity - oldLog.quantity; // new quantity - old quantity
-        const newStockForProduct = product.stock - quantityChange; // if new qty > old qty, change is positive, stock decreases more. if new qty < old qty, change is negative, stock increases.
+        const quantityChange = updatedLog.quantity - oldLog.quantity; 
+        const newStockForProduct = (product.stock || 0) - quantityChange;
 
         if (newStockForProduct < 0) {
-          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için stok ${newStockForProduct} olamaz. Mevcut stok: ${product.stock}, Eski sevk: ${oldLog.quantity}, Yeni sevk: ${updatedLog.quantity}.`);
+          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için stok ${newStockForProduct} olamaz. Mevcut stok: ${product.stock || 0}, Eski sevk: ${oldLog.quantity}, Yeni sevk: ${updatedLog.quantity}.`);
         }
         
         set((state) => ({
@@ -340,33 +339,49 @@ export const useStore = create<AppState>()(
           ),
         }));
       },
-      deleteShipmentLog: (logId) => {
-        const { products, shipmentLogs } = get();
-        const logToDelete = shipmentLogs.find(l => l.id === logId);
+      deleteShipmentLog: (logId: string) => {
+        console.log("store.deleteShipmentLog called for ID:", logId); 
+
+        const initialShipmentLogs = get().shipmentLogs;
+        const initialProducts = get().products;
+
+        const logToDelete = initialShipmentLogs.find(l => l.id === logId);
+        console.log("Found logToDelete in store:", logToDelete); 
 
         if (!logToDelete) {
+          console.error("Silinecek sevkiyat kaydı bulunamadı (store). ID:", logId);
           throw new Error("Silinecek sevkiyat kaydı bulunamadı.");
         }
+        
+        set(state => {
+          console.log("Setting state in deleteShipmentLog. Current logs count:", state.shipmentLogs.length); 
+          const updatedShipmentLogs = state.shipmentLogs.filter(l => l.id !== logId);
+          let updatedProducts = [...state.products]; 
 
-        const product = products.find(p => p.id === logToDelete.productId);
-        if (!product) {
-          // This case should ideally not happen if data integrity is maintained.
-          // If it does, we can only remove the log but can't adjust stock.
-          console.warn(`Sevkiyatı silinecek ürün (ID: ${logToDelete.productId}) bulunamadı. Stok ayarlanamadı.`);
-          set((state) => ({
-            shipmentLogs: state.shipmentLogs.filter((l) => l.id !== logId),
-          }));
-          return;
-        }
+          const productToAdjust = state.products.find(p => p.id === logToDelete.productId);
+          console.log("Product to adjust in store (inside set):", productToAdjust);
 
-        set((state) => ({
-          shipmentLogs: state.shipmentLogs.filter((l) => l.id !== logId),
-          products: state.products.map((p) =>
-            p.id === logToDelete.productId ? { ...p, stock: p.stock + logToDelete.quantity } : p
-          ),
-        }));
+          if (productToAdjust) {
+            const newStock = (productToAdjust.stock || 0) + logToDelete.quantity; 
+            console.log(`Adjusting stock for product ${productToAdjust.id}. Old stock: ${productToAdjust.stock}, Quantity to add back: ${logToDelete.quantity}, New stock: ${newStock}`);
+            updatedProducts = state.products.map(p =>
+              p.id === logToDelete.productId
+                ? { ...p, stock: newStock }
+                : p
+            );
+          } else {
+            console.warn(
+              `Sevkiyat (ID: ${logId}) silindi ancak ilişkili ürün (ID: ${logToDelete.productId}) bulunamadığı için stok güncellenemedi.`
+            );
+          }
+          console.log("New logs count after filter:", updatedShipmentLogs.length); 
+          return {
+            shipmentLogs: updatedShipmentLogs,
+            products: updatedProducts,
+          };
+        });
+        console.log("State update initiated in deleteShipmentLog");
       },
-
     }),
     {
       name: 'stoktakip-storage', 
