@@ -2,8 +2,8 @@
 
 import type { BOM } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Edit, Trash2, List, MoreHorizontal } from "lucide-react"; // Added MoreHorizontal
-import { getProductNameById } from "@/lib/store";
+import { Edit, Trash2, List, MoreHorizontal } from "lucide-react"; 
+import { getProductNameById, getProductCodeById } from "@/lib/store";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// import { DotsHorizontalIcon } from "@radix-ui/react-icons"; // Removed
 import {
   Tooltip,
   TooltipContent,
@@ -33,16 +32,19 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
     cell: ({ row }: { row: BOM }) => <div className="font-medium">{row.name}</div>,
   },
   {
-    accessorKey: "productName",
-    header: "Ana Ürün",
-    cell: ({ row }: { row: BOM }) => getProductNameById(row.productId),
+    accessorKey: "mainProductInfo",
+    header: "Ana Ürün (Kod - Ad)",
+    cell: ({ row }: { row: BOM }) => {
+        const code = getProductCodeById(row.productId);
+        const name = getProductNameById(row.productId);
+        return code ? `${code} - ${name}` : name;
+    }
   },
   {
     accessorKey: "componentCount",
     header: "Bileşen Sayısı",
     cell: ({ row }: { row: BOM }) => {
       const count = row.components.length;
-      const componentNames = row.components.map(c => `${getProductNameById(c.productId)}: ${c.quantity}`).join('\n');
       
       return (
         <TooltipProvider>
@@ -55,11 +57,15 @@ export const getBomColumns = ({ onEdit, onDelete }: BomColumnsProps) => [
             </TooltipTrigger>
             <TooltipContent className="max-w-xs whitespace-pre-line text-sm bg-popover text-popover-foreground p-2 rounded-md shadow-lg border">
               <p className="font-semibold mb-1">Bileşenler:</p>
-              {row.components.map(c => (
-                <div key={c.productId} className="text-xs">
-                  {getProductNameById(c.productId)}: {c.quantity}
-                </div>
-              ))}
+              {row.components.map(c => {
+                const componentCode = getProductCodeById(c.productId);
+                const componentName = getProductNameById(c.productId);
+                return (
+                  <div key={c.productId} className="text-xs">
+                    {componentCode ? `${componentCode} - ` : ''}{componentName}: {c.quantity}
+                  </div>
+                )
+              })}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>

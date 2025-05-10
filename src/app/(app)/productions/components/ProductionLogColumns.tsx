@@ -1,15 +1,19 @@
 "use client";
 
 import type { ProductionLog } from "@/types";
-import { useStore, getProductNameById } from "@/lib/store";
+import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
 export const productionLogColumns = [
   {
-    accessorKey: "productName",
-    header: "Üretilen Ürün",
-    cell: ({ row }: { row: ProductionLog }) => <div className="font-medium">{getProductNameById(row.productId)}</div>,
+    accessorKey: "productInfo",
+    header: "Üretilen Ürün (Kod - Ad)",
+    cell: ({ row }: { row: ProductionLog }) => {
+      const code = getProductCodeById(row.productId);
+      const name = getProductNameById(row.productId);
+      return <div className="font-medium">{code ? `${code} - ${name}` : name}</div>;
+    },
   },
   {
     accessorKey: "bomName",

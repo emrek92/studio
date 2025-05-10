@@ -3,7 +3,7 @@
 import type { Product, ProductType } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Edit, Trash2, MoreHorizontal } from "lucide-react"; // Replaced DotsHorizontalIcon with MoreHorizontal from lucide-react
+import { Edit, Trash2, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-// import { DotsHorizontalIcon } from "@radix-ui/react-icons"; // Removed as @radix-ui/react-icons is not installed by default
 
 const productTypeLabels: Record<ProductType, string> = {
   hammadde: "Hammadde",
@@ -28,6 +27,11 @@ interface ProductColumnsProps {
 
 export const getProductColumns = ({ onEdit, onDelete }: ProductColumnsProps) => [
   {
+    accessorKey: "productCode",
+    header: "Ürün Kodu",
+    cell: ({ row }: { row: Product }) => <div className="font-mono">{row.productCode}</div>,
+  },
+  {
     accessorKey: "name",
     header: "Ürün Adı",
     cell: ({ row }: { row: Product }) => <div className="font-medium">{row.name}</div>,
@@ -39,7 +43,7 @@ export const getProductColumns = ({ onEdit, onDelete }: ProductColumnsProps) => 
       <Badge variant={
         row.type === 'mamul' ? 'default' : 
         row.type === 'hammadde' ? 'secondary' :
-        row.type === 'yari_mamul' ? 'outline' : 'default' // Adjust as needed
+        row.type === 'yari_mamul' ? 'outline' : 'default'
       }>
         {productTypeLabels[row.type]}
       </Badge>

@@ -1,15 +1,19 @@
 "use client";
 
 import type { RawMaterialEntry } from "@/types";
-import { getProductNameById } from "@/lib/store";
+import { getProductNameById, getProductCodeById } from "@/lib/store";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 
 export const rawMaterialEntryColumns = [
   {
-    accessorKey: "productName",
-    header: "Hammadde Adı",
-    cell: ({ row }: { row: RawMaterialEntry }) => <div className="font-medium">{getProductNameById(row.productId)}</div>,
+    accessorKey: "productInfo",
+    header: "Hammadde (Kod - Ad)",
+    cell: ({ row }: { row: RawMaterialEntry }) => {
+      const code = getProductCodeById(row.productId);
+      const name = getProductNameById(row.productId);
+      return <div className="font-medium">{code ? `${code} - ${name}` : name}</div>;
+    },
   },
   {
     accessorKey: "quantity",

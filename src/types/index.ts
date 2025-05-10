@@ -2,6 +2,7 @@ export type ProductType = 'hammadde' | 'yari_mamul' | 'mamul' | 'yardimci_malzem
 
 export interface Product {
   id: string;
+  productCode: string; // Added product code
   name: string;
   type: ProductType;
   unit: string; // örn: kg, adet, litre, metre
@@ -38,3 +39,4 @@ export interface ProductionLog {
   date: string; // ISO tarih formatı
   notes?: string;
 }
+

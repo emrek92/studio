@@ -28,7 +28,9 @@ export default function InventoryPage() {
 
   const filteredProducts = React.useMemo(() => {
     return products.filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      const matchesSearch = product.name.toLowerCase().includes(lowerSearchTerm) || 
+                            product.productCode.toLowerCase().includes(lowerSearchTerm);
       const matchesType = selectedType === "all" || product.type === selectedType;
       return matchesSearch && matchesType;
     });
@@ -44,7 +46,7 @@ export default function InventoryPage() {
         <h1 className="text-3xl font-bold">Stok Seviyeleri</h1>
         <div className="flex gap-2 w-full sm:w-auto">
           <Input 
-            placeholder="Ürün adı ile ara..."
+            placeholder="Ürün adı veya kodu ile ara..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="max-w-sm"

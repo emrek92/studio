@@ -25,22 +25,21 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-import { downloadExcelTemplate, parseExcelFile } from "@/lib/excelUtils";
-import { productFormSchema } from "./components/ProductForm"; // Assuming schema is exported
+import { downloadExcelTemplate, parseExcelFile, findProductByCode } from "@/lib/excelUtils";
+import { productFormSchema } from "./components/ProductForm"; 
 import * as z from "zod";
 
-// Re-define or import productTypes from ProductForm, ensuring it's accessible
 const productTypesArray: { value: ProductType; label: string }[] = [
   { value: "hammadde", label: "Hammadde" },
   { value: "yari_mamul", label: "Yarı Mamul" },
   { value: "mamul", label: "Mamul" },
   { value: "yardimci_malzeme", label: "Yardımcı Malzeme" },
 ];
-const validProductTypes = productTypesArray.map(pt => pt.value);
+const validProductTypes = productTypesArray.map(pt => pt.value) as [ProductType, ...ProductType[]];
 
 
 export default function ProductsPage() {
-  const { products, deleteProduct, addProduct } = useStore();
+  const { products, deleteProduct, addProduct, getProductByCode } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingProduct, setEditingProduct] = React.useState<Product | undefined>(undefined);
@@ -81,11 +80,12 @@ export default function ProductsPage() {
   };
 
   const generateProductTemplate = () => {
-    const headers = ["Ürün Adı*", "Türü (hammadde, yari_mamul, mamul, yardimci_malzeme)*", "Ölçü Birimi*", "Başlangıç Stok Miktarı", "Açıklama"];
-    const exampleRow = ["Örnek Kırmızı Boya", "hammadde", "kg", 100, "Kaliteli kırmızı boya"];
+    const headers = ["Ürün Kodu*", "Ürün Adı*", "Türü (hammadde, yari_mamul, mamul, yardimci_malzeme)*", "Ölçü Birimi*", "Başlangıç Stok Miktarı", "Açıklama"];
+    const exampleRow = ["HAM-001", "Örnek Kırmızı Boya", "hammadde", "kg", 100, "Kaliteli kırmızı boya"];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
+        ["- Ürün Kodu benzersiz olmalıdır."],
         ["- Tür alanı şu değerlerden biri olmalıdır: hammadde, yari_mamul, mamul, yardimci_malzeme"],
         ["- Başlangıç Stok Miktarı sayı olmalıdır, boş bırakılırsa 0 kabul edilir."],
     ];
@@ -105,44 +105,52 @@ export default function ProductsPage() {
       let successCount = 0;
       let errorCount = 0;
       const errorMessages: string[] = [];
-      const existingProductNames = new Set(products.map(p => p.name.toLowerCase().trim()));
+      const currentProducts = useStore.getState().products; // Get current products for uniqueness check
 
-      // Schema for import validation (stock can be string then coerced)
       const importProductSchema = z.object({
+        "Ürün Kodu*": z.string().min(1, "Ürün kodu zorunludur.").max(20, "Ürün kodu en fazla 20 karakter olabilir."),
         "Ürün Adı*": z.string().min(2, "Ürün adı en az 2 karakter olmalıdır."),
-        "Türü (hammadde, yari_mamul, mamul, yardimci_malzeme)*": z.enum(validProductTypes as [ProductType, ...ProductType[]], { errorMap: () => ({ message: "Geçersiz ürün türü."}) }),
+        "Türü (hammadde, yari_mamul, mamul, yardimci_malzeme)*": z.enum(validProductTypes, { errorMap: () => ({ message: "Geçersiz ürün türü."}) }),
         "Ölçü Birimi*": z.string().min(1, "Ölçü birimi girilmelidir."),
         "Başlangıç Stok Miktarı": z.preprocess(val => (val === null || val === undefined || String(val).trim() === '') ? 0 : Number(val), z.number().min(0, "Stok miktarı negatif olamaz.").default(0)),
         "Açıklama": z.string().optional().nullable(),
       });
 
+      const productsInFile = new Set<string>(); // To check for duplicate product codes within the file
 
       for (const row of productSheet) {
         const validationResult = importProductSchema.safeParse(row);
         if (validationResult.success) {
           const data = validationResult.data;
-          const productName = data["Ürün Adı*"].toLowerCase().trim();
-          if (existingProductNames.has(productName)) {
-            errorMessages.push(`'${data["Ürün Adı*"]}' adlı ürün zaten mevcut.`);
+          const productCode = data["Ürün Kodu*"].trim();
+
+          if (getProductByCode(productCode) || productsInFile.has(productCode.toLowerCase())) {
+            errorMessages.push(`'${productCode}' kodlu ürün zaten mevcut veya dosyada tekrar ediyor.`);
             errorCount++;
             continue;
           }
 
           const newProduct: Product = {
             id: crypto.randomUUID(),
+            productCode: productCode,
             name: data["Ürün Adı*"].trim(),
             type: data["Türü (hammadde, yari_mamul, mamul, yardimci_malzeme)*"],
             unit: data["Ölçü Birimi*"],
             stock: data["Başlangıç Stok Miktarı"],
             description: data["Açıklama"] || "",
           };
-          addProduct(newProduct);
-          existingProductNames.add(productName); // Add to set to prevent duplicates within the same file
-          successCount++;
+          try {
+            addProduct(newProduct);
+            productsInFile.add(productCode.toLowerCase()); 
+            successCount++;
+          } catch (e: any) {
+            errorMessages.push(`'${productCode}': ${e.message}`);
+            errorCount++;
+          }
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
-          errorMessages.push(`Satır ${productSheet.indexOf(row) + 2}: ${row["Ürün Adı*"] || 'Bilinmeyen Ürün'} - ${errors}`);
+          errorMessages.push(`Satır ${productSheet.indexOf(row) + 2}: ${row["Ürün Kodu*"] || row["Ürün Adı*"] || 'Bilinmeyen Ürün'} - ${errors}`);
         }
       }
 
@@ -154,12 +162,10 @@ export default function ProductsPage() {
       toast({ title: "İçe Aktarma Tamamlandı", description });
       if(successCount > 0) setIsImportModalOpen(false);
 
-
     } catch (error: any) {
       toast({ title: "İçe Aktarma Hatası", description: error.message || "Dosya işlenirken bir hata oluştu.", variant: "destructive" });
     }
   };
-
 
   const columns = React.useMemo(() => getProductColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
 

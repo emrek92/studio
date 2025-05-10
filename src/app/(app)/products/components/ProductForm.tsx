@@ -34,6 +34,7 @@ const productTypes: { value: ProductType; label: string }[] = [
 ];
 
 export const productFormSchema = z.object({
+  productCode: z.string().min(1, { message: "Ürün kodu zorunludur." }).max(20, {message: "Ürün kodu en fazla 20 karakter olabilir."}),
   name: z.string().min(2, { message: "Ürün adı en az 2 karakter olmalıdır." }),
   type: z.enum(["hammadde", "yari_mamul", "mamul", "yardimci_malzeme"], {
     required_error: "Ürün türü seçilmelidir.",
@@ -51,8 +52,7 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ product, onSuccess }: ProductFormProps) {
-  const addProduct = useStore((state) => state.addProduct);
-  const updateProduct = useStore((state) => state.updateProduct);
+  const { addProduct, updateProduct, getProductByCode } = useStore();
   const { toast } = useToast();
 
   const form = useForm<ProductFormValues>({
@@ -60,6 +60,7 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
     defaultValues: product
       ? { ...product, stock: product.stock || 0 }
       : {
+          productCode: "",
           name: "",
           type: undefined,
           unit: "",
@@ -70,10 +71,15 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
 
   function onSubmit(data: ProductFormValues) {
     try {
-      if (product) {
+      if (product) { // Editing existing product
         updateProduct({ ...product, ...data });
         toast({ title: "Ürün Güncellendi", description: `${data.name} ürünü başarıyla güncellendi.` });
-      } else {
+      } else { // Adding new product
+        const existingProductWithCode = getProductByCode(data.productCode);
+        if (existingProductWithCode) {
+          form.setError("productCode", { type: "manual", message: "Bu ürün kodu zaten kullanılıyor." });
+          return;
+        }
         const newProduct: Product = {
           id: crypto.randomUUID(),
           ...data,
@@ -82,8 +88,8 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
         toast({ title: "Ürün Eklendi", description: `${data.name} ürünü başarıyla eklendi.` });
       }
       onSuccess();
-    } catch (error) {
-      toast({ title: "Hata", description: "İşlem sırasında bir hata oluştu.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -98,6 +104,20 @@ export function ProductForm({ product, onSuccess }: ProductFormProps) {
           </DialogDescription>
         </DialogHeader>
         
+        <FormField
+          control={form.control}
+          name="productCode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Ürün Kodu</FormLabel>
+              <FormControl>
+                <Input placeholder="Örn: HAM-001" {...field} disabled={!!product} />
+              </FormControl>
+              {!!product && <p className="text-xs text-muted-foreground">Ürün kodu değiştirilemez.</p>}
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <FormField
           control={form.control}
           name="name"

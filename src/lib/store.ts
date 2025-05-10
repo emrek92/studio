@@ -13,6 +13,7 @@ interface AppState {
   updateProduct: (product: Product) => void;
   deleteProduct: (productId: string) => void;
   getProductById: (productId: string) => Product | undefined;
+  getProductByCode: (productCode: string) => Product | undefined;
   
   // BOM actions
   addBom: (bom: BOM) => void;
@@ -40,7 +41,13 @@ export const useStore = create<AppState>()(
       productionLogs: [],
 
       // Product actions
-      addProduct: (product) => set((state) => ({ products: [...state.products, product] })),
+      addProduct: (product) => {
+        const existingProduct = get().products.find(p => p.productCode.toLowerCase() === product.productCode.toLowerCase());
+        if (existingProduct) {
+          throw new Error(`'${product.productCode}' kodlu ürün zaten mevcut.`);
+        }
+        set((state) => ({ products: [...state.products, product] }));
+      },
       updateProduct: (updatedProduct) =>
         set((state) => ({
           products: state.products.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)),
@@ -51,6 +58,7 @@ export const useStore = create<AppState>()(
           // Also consider implications for BOMs and entries/logs
         })),
       getProductById: (productId) => get().products.find(p => p.id === productId),
+      getProductByCode: (productCode) => get().products.find(p => p.productCode.toLowerCase() === productCode.toLowerCase()),
 
       // BOM actions
       addBom: (bom) => set((state) => ({ boms: [...state.boms, bom] })),
@@ -79,7 +87,7 @@ export const useStore = create<AppState>()(
         const bom = get().boms.find(b => b.id === log.bomId);
         if (!bom) {
           console.error("Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı");
-          // Potentially show a toast error to the user
+          alert("Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı."); // Simple alert, replace with toast
           return; 
         }
 
@@ -93,12 +101,17 @@ export const useStore = create<AppState>()(
           }
           return {
             productId: component.productId,
-            newStock: product ? product.stock - (component.quantity * log.quantity) : 0
+            newStock: product ? product.stock - (component.quantity * log.quantity) : 0,
+            productName: product ? product.name : 'Bilinmeyen Bileşen'
           };
         });
         
         if (!possible) {
-          alert("Üretim için yeterli bileşen stoğu bulunmamaktadır."); // Simple alert, replace with toast
+          const insufficientComponent = componentUpdates.find(cu => {
+            const product = productsToUpdate.find(p => p.id === cu.productId);
+            return !product || product.stock < (bom.components.find(c=>c.productId === cu.productId)?.quantity || 0) * log.quantity;
+          });
+          alert(`Üretim için yeterli '${insufficientComponent?.productName || ''}' bileşen stoğu bulunmamaktadır.`); // Simple alert, replace with toast
           return; // Stop processing
         }
 
@@ -125,8 +138,19 @@ export const useStore = create<AppState>()(
   )
 );
 
+export const getProductDisplayInfoById = (productId: string): string => {
+  const products = useStore.getState().products;
+  const product = products.find(p => p.id === productId);
+  return product ? `${product.productCode} - ${product.name}` : 'Bilinmeyen Ürün';
+};
+
 export const getProductNameById = (productId: string): string => {
   const products = useStore.getState().products;
   const product = products.find(p => p.id === productId);
   return product ? product.name : 'Bilinmeyen Ürün';
+};
+
+export const getProductCodeById = (productId: string): string | undefined => {
+    const product = useStore.getState().products.find(p => p.id === productId);
+    return product?.productCode;
 };

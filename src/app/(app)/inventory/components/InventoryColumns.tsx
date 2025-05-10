@@ -13,6 +13,11 @@ const productTypeLabels: Record<ProductType, string> = {
 
 export const inventoryColumns = [
   {
+    accessorKey: "productCode",
+    header: "Ürün Kodu",
+    cell: ({ row }: { row: Product }) => <div className="font-mono">{row.productCode}</div>,
+  },
+  {
     accessorKey: "name",
     header: "Ürün Adı",
     cell: ({ row }: { row: Product }) => <div className="font-medium">{row.name}</div>,

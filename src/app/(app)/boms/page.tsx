@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { BomForm } from "./components/BomForm";
 import { getBomColumns } from "./components/BomColumns";
-import { useStore, getProductNameById } from "@/lib/store";
+import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
 import type { BOM, Product, BomComponent, ProductType } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud } from "lucide-react";
@@ -25,7 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-import { downloadExcelTemplate, parseExcelFile, findProductIdByName } from "@/lib/excelUtils";
+import { downloadExcelTemplate, parseExcelFile, findProductByCode } from "@/lib/excelUtils";
 import * as z from "zod";
 
 export default function BomsPage() {
@@ -70,22 +70,24 @@ export default function BomsPage() {
   };
 
   const generateBomTemplate = () => {
-    const bomHeaders = ["Ana Ürün Adı (Mamul)*"];
-    const bomExample = ["Örnek Mamul A"];
+    const bomHeaders = ["Ana Ürün Kodu (Mamul)*", "Ana Ürün Adı (Mamul) - Bilgilendirme"];
+    const bomExample = ["MAM-001", "Örnek Mamul A"];
     const bomNotes = [
         ["Notlar (Ürün Reçeteleri Sayfası):"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Ana Ürün Adı (Mamul)' sistemde kayıtlı bir 'mamul' türünde ürün olmalıdır."],
+        ["- 'Ana Ürün Kodu (Mamul)' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
+        ["- 'Ana Ürün Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
         ["- Her satır yeni bir ürün reçetesi tanımlar."]
     ];
 
-    const componentHeaders = ["Ana Ürün Adı (Reçete Sahibi)*", "Bileşen Ürün Adı*", "Miktar*"];
-    const componentExample = ["Örnek Mamul A", "Örnek Hammadde X", 2.5];
+    const componentHeaders = ["Ana Ürün Kodu (Reçete Sahibi)*", "Bileşen Ürün Kodu*", "Bileşen Ürün Adı - Bilgilendirme", "Miktar*"];
+    const componentExample = ["MAM-001", "HAM-001", "Örnek Hammadde X", 2.5];
     const componentNotes = [
         ["Notlar (Reçete Bileşenleri Sayfası):"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Ana Ürün Adı (Reçete Sahibi)' Ürün Reçeteleri sayfasında tanımlanmış bir ana ürün adı olmalıdır."],
-        ["- 'Bileşen Ürün Adı' sistemde kayıtlı bir 'hammadde' veya 'yari_mamul' türünde ürün olmalıdır."],
+        ["- 'Ana Ürün Kodu (Reçete Sahibi)' Ürün Reçeteleri sayfasında tanımlanmış bir ana ürünün kodu olmalıdır."],
+        ["- 'Bileşen Ürün Kodu' sistemde kayıtlı bir 'hammadde' veya 'yari_mamul' türünde ürünün kodu olmalıdır."],
+        ["- 'Bileşen Ürün Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
         ["- 'Miktar' pozitif bir sayı olmalıdır."]
     ];
 
@@ -113,10 +115,10 @@ export default function BomsPage() {
       const allProducts = useStore.getState().products;
       const existingBoms = useStore.getState().boms;
 
-      const bomSchema = z.object({ "Ana Ürün Adı (Mamul)*": z.string().min(1) });
+      const bomSchema = z.object({ "Ana Ürün Kodu (Mamul)*": z.string().min(1) });
       const componentSchema = z.object({
-        "Ana Ürün Adı (Reçete Sahibi)*": z.string().min(1),
-        "Bileşen Ürün Adı*": z.string().min(1),
+        "Ana Ürün Kodu (Reçete Sahibi)*": z.string().min(1),
+        "Bileşen Ürün Kodu*": z.string().min(1),
         "Miktar*": z.preprocess(val => Number(val), z.number().positive()),
       });
 
@@ -129,17 +131,17 @@ export default function BomsPage() {
           continue;
         }
         
-        const mainProductName = bomValidation.data["Ana Ürün Adı (Mamul)*"];
-        const mainProduct = allProducts.find(p => p.name.toLowerCase().trim() === mainProductName.toLowerCase().trim() && p.type === 'mamul');
+        const mainProductCode = bomValidation.data["Ana Ürün Kodu (Mamul)*"];
+        const mainProduct = findProductByCode(mainProductCode, allProducts);
 
-        if (!mainProduct) {
-          errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductName}' adlı mamul ürün bulunamadı veya türü yanlış.`);
+        if (!mainProduct || mainProduct.type !== 'mamul') {
+          errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductCode}' kodlu mamul ürün bulunamadı veya türü yanlış.`);
           errorCount++;
           continue;
         }
 
         if (existingBoms.some(b => b.productId === mainProduct.id) || importedBoms.some(b => b.productId === mainProduct.id)) {
-            errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductName}' için zaten bir reçete mevcut veya dosyada tekrar ediyor.`);
+            errorMessages.push(`Reçeteler Satır ${bomsSheet.indexOf(row) + 2}: '${mainProductCode}' (${mainProduct.name}) için zaten bir reçete mevcut veya dosyada tekrar ediyor.`);
             errorCount++;
             continue;
         }
@@ -147,7 +149,7 @@ export default function BomsPage() {
         importedBoms.push({
           id: crypto.randomUUID(),
           productId: mainProduct.id,
-          name: `${mainProduct.name} Reçetesi`,
+          name: `${mainProduct.productCode} - ${mainProduct.name} Reçetesi`,
           components: [],
         });
       }
@@ -161,26 +163,28 @@ export default function BomsPage() {
           continue;
         }
 
-        const bomOwnerName = compValidation.data["Ana Ürün Adı (Reçete Sahibi)*"];
-        const componentProductName = compValidation.data["Bileşen Ürün Adı*"];
+        const bomOwnerProductCode = compValidation.data["Ana Ürün Kodu (Reçete Sahibi)*"];
+        const componentProductCode = compValidation.data["Bileşen Ürün Kodu*"];
         const quantity = compValidation.data["Miktar*"];
 
-        const targetBom = importedBoms.find(b => getProductNameById(b.productId).toLowerCase().trim() === bomOwnerName.toLowerCase().trim());
+        const targetBom = importedBoms.find(b => getProductCodeById(b.productId)?.toLowerCase().trim() === bomOwnerProductCode.toLowerCase().trim());
         if (!targetBom) {
-          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${bomOwnerName}' adlı ana ürüne sahip reçete bulunamadı (önce UrunReceteleri sayfasında tanımlanmalı).`);
+          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${bomOwnerProductCode}' kodlu ana ürüne sahip reçete bulunamadı (önce UrunReceteleri sayfasında tanımlanmalı).`);
           errorCount++;
           continue;
         }
+        
+        const mainProductOfTargetBom = findProductByCode(bomOwnerProductCode, allProducts); // for error message
 
-        const componentProduct = allProducts.find(p => p.name.toLowerCase().trim() === componentProductName.toLowerCase().trim() && (p.type === 'hammadde' || p.type === 'yari_mamul'));
-        if (!componentProduct) {
-          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${componentProductName}' adlı hammadde/yarı mamul ürün bulunamadı veya türü yanlış.`);
+        const componentProduct = findProductByCode(componentProductCode, allProducts);
+        if (!componentProduct || (componentProduct.type !== 'hammadde' && componentProduct.type !== 'yari_mamul')) {
+          errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: '${componentProductCode}' kodlu hammadde/yarı mamul ürün bulunamadı veya türü yanlış.`);
           errorCount++;
           continue;
         }
         
         if (targetBom.productId === componentProduct.id) {
-            errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: Ana ürün ('${bomOwnerName}') kendi reçetesinde bileşen olarak kullanılamaz.`);
+            errorMessages.push(`Bileşenler Satır ${componentsSheet.indexOf(row) + 2}: Ana ürün ('${bomOwnerProductCode}' - ${mainProductOfTargetBom?.name}) kendi reçetesinde bileşen olarak kullanılamaz.`);
             errorCount++;
             continue;
         }
@@ -191,7 +195,8 @@ export default function BomsPage() {
       // Step 3: Validate and add BOMs
       for(const bomToAdd of importedBoms) {
           if (bomToAdd.components.length === 0) {
-              errorMessages.push(`'${getProductNameById(bomToAdd.productId)}' adlı reçete için hiç bileşen tanımlanmamış.`);
+              const bomProduct = findProductByCode(getProductCodeById(bomToAdd.productId) || "", allProducts);
+              errorMessages.push(`'${bomToAdd.productId}' (${bomProduct?.name}) kodlu reçete için hiç bileşen tanımlanmamış.`);
               errorCount++;
               continue;
           }
@@ -202,9 +207,17 @@ export default function BomsPage() {
       let description = `${successCount} Ürün Reçetesi (BOM) başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
         description += ` ${errorCount} kayıtta hata oluştu.`;
-        console.error("İçe aktarma hataları:", errorMessages);
+        console.error("İçe aktarma hataları:", errorMessages.join("\n"));
+        toast({
+            title: "Kısmi İçe Aktarma Tamamlandı",
+            description: `${description}\nDetaylar için konsolu kontrol edin.`,
+            variant: "default",
+            duration: 10000,
+         });
+
+      } else {
+        toast({ title: "İçe Aktarma Tamamlandı", description });
       }
-      toast({ title: "İçe Aktarma Tamamlandı", description });
       if(successCount > 0) setIsImportModalOpen(false);
 
     } catch (error: any) {
@@ -213,7 +226,7 @@ export default function BomsPage() {
   };
 
 
-  const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
+  const columns = React.useMemo(() => getBomColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, handleEdit, handleDeleteConfirm]);
 
   if (!isMounted) {
     return <div className="flex items-center justify-center h-full"><p>Yükleniyor...</p></div>;

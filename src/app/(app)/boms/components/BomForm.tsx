@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useStore, getProductNameById } from "@/lib/store";
+import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
 import type { BOM } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { PlusCircle, Trash2 } from "lucide-react";
@@ -34,7 +34,6 @@ const bomComponentSchema = z.object({
 
 const bomFormSchema = z.object({
   productId: z.string().min(1, "Ana ürün seçilmelidir."),
-  // name: z.string().min(2, "Ürün Reçetesi (BOM) adı en az 2 karakter olmalıdır."), // Removed
   components: z.array(bomComponentSchema).min(1, "En az bir bileşen eklenmelidir."),
 });
 
@@ -58,7 +57,6 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
       ? { productId: bom.productId, components: bom.components } 
       : {
           productId: "",
-          // name: "", // Removed
           components: [{ productId: "", quantity: 1 }],
         },
   });
@@ -70,8 +68,12 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
 
   function onSubmit(data: BomFormValues) {
     try {
-      const mainProductName = getProductNameById(data.productId);
-      const bomName = `${mainProductName} Reçetesi`;
+      const mainProduct = products.find(p => p.id === data.productId);
+      if (!mainProduct) {
+          toast({ title: "Hata", description: "Ana ürün bulunamadı.", variant: "destructive" });
+          return;
+      }
+      const bomName = `${mainProduct.productCode} - ${mainProduct.name} Reçetesi`;
 
       if (bom) {
         updateBom({ ...bom, ...data, name: bomName });
@@ -80,7 +82,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
         const newBom: BOM = {
           id: crypto.randomUUID(),
           ...data,
-          name: bomName, // Auto-generated name
+          name: bomName, 
         };
         addBom(newBom);
         toast({ title: "Ürün Reçetesi (BOM) Eklendi", description: `${bomName} adlı Ürün Reçetesi (BOM) başarıyla eklendi.` });
@@ -117,7 +119,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                 <SelectContent>
                   {finishedProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.name}
+                      {p.productCode} - {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -126,8 +128,6 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
             </FormItem>
           )}
         />
-
-        {/* Removed BOM Name FormField */}
 
         <div>
           <FormLabel>Bileşenler</FormLabel>
@@ -149,7 +149,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                         <SelectContent>
                           {componentProducts.map((p) => (
                             <SelectItem key={p.id} value={p.id}>
-                              {p.name} ({p.unit})
+                              {p.productCode} - {p.name} ({p.unit})
                             </SelectItem>
                           ))}
                         </SelectContent>

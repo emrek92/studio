@@ -30,6 +30,7 @@ import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { tr } from "date-fns/locale";
 
 const rawMaterialEntryFormSchema = z.object({
   productId: z.string().min(1, "Hammadde seçilmelidir."),
@@ -102,17 +103,17 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           name="productId"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Hammadde</FormLabel>
+              <FormLabel>Hammadde/Yardımcı Malzeme</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Hammadde seçin" />
+                    <SelectValue placeholder="Hammadde/Yardımcı Malzeme seçin" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
                   {rawMaterials.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.name} ({p.unit})
+                      {p.productCode} - {p.name} ({p.unit})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -153,7 +154,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                       )}
                     >
                       {field.value ? (
-                        format(field.value, "PPP", { locale: require("date-fns/locale/tr") })
+                        format(field.value, "PPP", { locale: tr })
                       ) : (
                         <span>Tarih seçin</span>
                       )}
@@ -167,7 +168,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                     selected={field.value}
                     onSelect={field.onChange}
                     initialFocus
-                    locale={require("date-fns/locale/tr")}
+                    locale={tr}
                   />
                 </PopoverContent>
               </Popover>

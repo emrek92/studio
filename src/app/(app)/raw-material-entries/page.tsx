@@ -14,10 +14,9 @@ import type { RawMaterialEntry, Product } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud } from "lucide-react";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-import { downloadExcelTemplate, parseExcelFile, findProductIdByName } from "@/lib/excelUtils";
+import { downloadExcelTemplate, parseExcelFile, findProductByCode } from "@/lib/excelUtils";
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
-import { format } from "date-fns"; // For date formatting if needed, or rely on cellDates: true
 
 export default function RawMaterialEntriesPage() {
   const { rawMaterialEntries, products, addRawMaterialEntry } = useStore();
@@ -33,12 +32,13 @@ export default function RawMaterialEntriesPage() {
   const columns = rawMaterialEntryColumns;
 
   const generateRawMaterialEntryTemplate = () => {
-    const headers = ["Hammadde/Yardımcı Malzeme Adı*", "Miktar*", "Tarih (GG.AA.YYYY)*", "Tedarikçi", "Notlar"];
-    const exampleRow = ["Örnek Hammadde X", 150, "01.01.2024", "ABC Tedarikçi", "İlk parti alımı"];
+    const headers = ["Hammadde/Yardımcı Malzeme Kodu*", "Hammadde/Yardımcı Malzeme Adı - Bilgilendirme", "Miktar*", "Tarih (GG.AA.YYYY)*", "Tedarikçi", "Notlar"];
+    const exampleRow = ["HAM-001", "Örnek Hammadde X", 150, "01.01.2024", "ABC Tedarikçi", "İlk parti alımı"];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Hammadde/Yardımcı Malzeme Adı' sistemde kayıtlı bir 'hammadde' veya 'yardimci_malzeme' türünde ürün olmalıdır."],
+        ["- 'Hammadde/Yardımcı Malzeme Kodu' sistemde kayıtlı bir 'hammadde' veya 'yardimci_malzeme' türünde ürünün kodu olmalıdır."],
+        ["- 'Hammadde/Yardımcı Malzeme Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
         ["- 'Miktar' pozitif bir sayı olmalıdır."],
         ["- 'Tarih' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
     ];
@@ -61,7 +61,7 @@ export default function RawMaterialEntriesPage() {
       const allProducts = useStore.getState().products;
 
       const importSchema = z.object({
-        "Hammadde/Yardımcı Malzeme Adı*": z.string().min(1, "Hammadde adı zorunludur."),
+        "Hammadde/Yardımcı Malzeme Kodu*": z.string().min(1, "Hammadde ürün kodu zorunludur."),
         "Miktar*": z.preprocess(val => Number(val), z.number().positive("Miktar pozitif olmalıdır.")),
         "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
         "Tedarikçi": z.string().optional().nullable(),
@@ -72,11 +72,11 @@ export default function RawMaterialEntriesPage() {
         const validationResult = importSchema.safeParse(row);
         if (validationResult.success) {
           const data = validationResult.data;
-          const productName = data["Hammadde/Yardımcı Malzeme Adı*"];
-          const product = allProducts.find(p => p.name.toLowerCase().trim() === productName.toLowerCase().trim() && (p.type === 'hammadde' || p.type === 'yardimci_malzeme'));
+          const productCode = data["Hammadde/Yardımcı Malzeme Kodu*"];
+          const product = findProductByCode(productCode, allProducts);
 
-          if (!product) {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${productName}' adlı hammadde/yardımcı malzeme bulunamadı veya türü yanlış.`);
+          if (!product || (product.type !== 'hammadde' && product.type !== 'yardimci_malzeme')) {
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${productCode}' kodlu hammadde/yardımcı malzeme bulunamadı veya türü yanlış.`);
             errorCount++;
             continue;
           }
@@ -94,16 +94,23 @@ export default function RawMaterialEntriesPage() {
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
-           errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Hammadde/Yardımcı Malzeme Adı*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
+           errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Hammadde/Yardımcı Malzeme Kodu*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
         }
       }
 
       let description = `${successCount} hammadde girişi başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
         description += ` ${errorCount} girişte hata oluştu.`;
-        console.error("İçe aktarma hataları:", errorMessages);
+        console.error("İçe aktarma hataları:", errorMessages.join("\n"));
+         toast({
+            title: "Kısmi İçe Aktarma Tamamlandı",
+            description: `${description}\nDetaylar için konsolu kontrol edin.`,
+            variant: "default",
+            duration: 10000,
+         });
+      } else {
+        toast({ title: "İçe Aktarma Tamamlandı", description });
       }
-      toast({ title: "İçe Aktarma Tamamlandı", description });
       if(successCount > 0) setIsImportModalOpen(false);
 
     } catch (error: any) {

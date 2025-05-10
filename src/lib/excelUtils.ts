@@ -74,18 +74,24 @@ export const parseExcelFile = async (file: File): Promise<Record<string, any[]>>
   });
 };
 
-// Helper to find product ID by name (case-insensitive, trimmed)
-export const findProductIdByName = (name: string, products: Product[]): string | undefined => {
-    if (!name || typeof name !== 'string') return undefined;
-    const product = products.find(p => p.name.toLowerCase().trim() === name.toLowerCase().trim());
-    return product?.id;
+// Helper to find product by code (case-insensitive, trimmed)
+export const findProductByCode = (code: string, products: Product[]): Product | undefined => {
+    if (!code || typeof code !== 'string') return undefined;
+    return products.find(p => p.productCode.toLowerCase().trim() === code.toLowerCase().trim());
 };
 
-// Helper to find BOM ID by its main product's name
-export const findBomIdByMainProductName = (mainProductName: string, boms: BOM[], products: Product[]): string | undefined => {
-    if (!mainProductName || typeof mainProductName !== 'string') return undefined;
-    const mainProductId = findProductIdByName(mainProductName, products);
-    if (!mainProductId) return undefined;
-    const bom = boms.find(b => b.productId === mainProductId);
+// Helper to find product by name (case-insensitive, trimmed)
+export const findProductByName = (name: string, products: Product[]): Product | undefined => {
+    if (!name || typeof name !== 'string') return undefined;
+    return products.find(p => p.name.toLowerCase().trim() === name.toLowerCase().trim());
+};
+
+
+// Helper to find BOM ID by its main product's code
+export const findBomIdByMainProductCode = (mainProductCode: string, boms: BOM[], products: Product[]): string | undefined => {
+    if (!mainProductCode || typeof mainProductCode !== 'string') return undefined;
+    const mainProduct = findProductByCode(mainProductCode, products);
+    if (!mainProduct) return undefined;
+    const bom = boms.find(b => b.productId === mainProduct.id);
     return bom?.id;
 };

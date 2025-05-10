@@ -96,15 +96,18 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           ...data,
           date: data.date.toISOString(),
         };
+        
+        const initialLogCount = useStore.getState().productionLogs.length;
         addProductionLog(newLog); 
         
-        if (!useStore.getState().productionLogs.find(pl => pl.id === newLog.id)) {
-          // This implies the log was not added, likely due to stock issue alerted in store.
-        } else {
+        if (useStore.getState().productionLogs.length > initialLogCount) {
            toast({ title: "Üretim Kaydı Eklendi", description: `Yeni üretim kaydı başarıyla eklendi.` });
+           onSuccess();
+        } else {
+          // Toast for insufficient stock is handled within the store's addProductionLog or by an explicit alert there.
+          // No need to call onSuccess if log wasn't added.
         }
       }
-      onSuccess(); 
     } catch (error: any) {
        toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
@@ -136,7 +139,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
                 <SelectContent>
                   {finishedProducts.map((p) => (
                     <SelectItem key={p.id} value={p.id}>
-                      {p.name}
+                      {p.productCode} - {p.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

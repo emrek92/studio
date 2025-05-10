@@ -14,7 +14,7 @@ import type { ProductionLog, Product, BOM } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud } from "lucide-react";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-import { downloadExcelTemplate, parseExcelFile, findProductIdByName, findBomIdByMainProductName } from "@/lib/excelUtils";
+import { downloadExcelTemplate, parseExcelFile, findProductByCode, findBomIdByMainProductCode } from "@/lib/excelUtils";
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
 
@@ -32,13 +32,14 @@ export default function ProductionLogsPage() {
   const columns = productionLogColumns;
 
   const generateProductionLogTemplate = () => {
-    const headers = ["Üretilen Mamul Adı*", "Kullanılan Reçetenin Ana Ürün Adı*", "Üretim Miktarı*", "Tarih (GG.AA.YYYY)*", "Notlar"];
-    const exampleRow = ["Örnek Mamul A", "Örnek Mamul A", 50, "02.01.2024", "Günlük üretim"];
+    const headers = ["Üretilen Mamul Kodu*", "Üretilen Mamul Adı - Bilgilendirme", "Kullanılan Reçetenin Ana Ürün Kodu*", "Üretim Miktarı*", "Tarih (GG.AA.YYYY)*", "Notlar"];
+    const exampleRow = ["MAM-001", "Örnek Mamul A", "MAM-001", 50, "02.01.2024", "Günlük üretim"];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
-        ["- 'Üretilen Mamul Adı' sistemde kayıtlı bir 'mamul' türünde ürün olmalıdır."],
-        ["- 'Kullanılan Reçetenin Ana Ürün Adı' sistemde kayıtlı ve bu mamule ait bir ürün reçetesinin ana ürün adı olmalıdır."],
+        ["- 'Üretilen Mamul Kodu' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
+        ["- 'Üretilen Mamul Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
+        ["- 'Kullanılan Reçetenin Ana Ürün Kodu' sistemde kayıtlı ve bu mamule ait bir ürün reçetesinin ana ürün kodu olmalıdır."],
         ["- 'Üretim Miktarı' pozitif bir sayı olmalıdır."],
         ["- 'Tarih' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
     ];
@@ -62,8 +63,8 @@ export default function ProductionLogsPage() {
       const allBoms = useStore.getState().boms;
 
       const importSchema = z.object({
-        "Üretilen Mamul Adı*": z.string().min(1, "Mamul adı zorunludur."),
-        "Kullanılan Reçetenin Ana Ürün Adı*": z.string().min(1, "Reçete ana ürün adı zorunludur."),
+        "Üretilen Mamul Kodu*": z.string().min(1, "Mamul ürün kodu zorunludur."),
+        "Kullanılan Reçetenin Ana Ürün Kodu*": z.string().min(1, "Reçete ana ürün kodu zorunludur."),
         "Üretim Miktarı*": z.preprocess(val => Number(val), z.number().positive("Miktar pozitif olmalıdır.")),
         "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
         "Notlar": z.string().optional().nullable(),
@@ -74,31 +75,31 @@ export default function ProductionLogsPage() {
         if (validationResult.success) {
           const data = validationResult.data;
           
-          const producedProductName = data["Üretilen Mamul Adı*"];
-          const producedProduct = allProducts.find(p => p.name.toLowerCase().trim() === producedProductName.toLowerCase().trim() && p.type === 'mamul');
-          if (!producedProduct) {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductName}' adlı mamul ürün bulunamadı.`);
+          const producedProductCode = data["Üretilen Mamul Kodu*"];
+          const producedProduct = findProductByCode(producedProductCode, allProducts);
+          if (!producedProduct || producedProduct.type !== 'mamul') {
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' kodlu mamul ürün bulunamadı veya türü yanlış.`);
             errorCount++;
             continue;
           }
 
-          const bomOwnerProductName = data["Kullanılan Reçetenin Ana Ürün Adı*"];
-          const bomId = findBomIdByMainProductName(bomOwnerProductName, allBoms, allProducts);
+          const bomOwnerProductCode = data["Kullanılan Reçetenin Ana Ürün Kodu*"];
+          const bomId = findBomIdByMainProductCode(bomOwnerProductCode, allBoms, allProducts);
           const bom = allBoms.find(b => b.id === bomId);
 
           if (!bom || bom.productId !== producedProduct.id) {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductName}' için '${bomOwnerProductName}' adlı ana ürüne sahip geçerli bir reçete bulunamadı.`);
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) için '${bomOwnerProductCode}' kodlu ana ürüne sahip geçerli bir reçete bulunamadı.`);
             errorCount++;
             continue;
           }
 
-          // Check stock for components (simplified check, actual check is in addProductionLog)
+          // Preliminary stock check for components (actual check is in addProductionLog)
           let canProduce = true;
           for (const component of bom.components) {
             const componentProduct = allProducts.find(p => p.id === component.productId);
             if (!componentProduct || componentProduct.stock < component.quantity * data["Üretim Miktarı*"]) {
               canProduce = false;
-              errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductName}' üretimi için yeterli '${componentProduct?.name || component.productId}' stoğu yok.`);
+              errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) üretimi için yeterli '${componentProduct?.productCode || component.productId}' (${componentProduct?.name || 'Bilinmeyen'}) stoğu yok.`);
               break;
             }
           }
@@ -106,7 +107,6 @@ export default function ProductionLogsPage() {
             errorCount++;
             continue;
           }
-
 
           const newLog: ProductionLog = {
             id: crypto.randomUUID(),
@@ -117,33 +117,35 @@ export default function ProductionLogsPage() {
             notes: data["Notlar"] || undefined,
           };
           
-          // addProductionLog handles stock updates and its own error (e.g. insufficient stock)
-          // For import, we rely on the store's internal logic for stock checks.
-          // If addProductionLog internally throws or returns an error state, we should catch it.
-          // For now, we assume addProductionLog will show its own toast for stock issues.
           const initialLogCount = useStore.getState().productionLogs.length;
           addProductionLog(newLog);
           if (useStore.getState().productionLogs.length > initialLogCount) {
             successCount++;
           } else {
-            // Log was not added, likely due to stock issue alerted by addProductionLog
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductName}' üretimi yapılamadı (muhtemelen stok yetersiz).`);
+            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${producedProductCode}' (${producedProduct.name}) üretimi yapılamadı (muhtemelen stok yetersiz).`);
             errorCount++;
           }
 
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
-          errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Üretilen Mamul Adı*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
+          errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Üretilen Mamul Kodu*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
         }
       }
 
       let description = `${successCount} üretim kaydı başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
         description += ` ${errorCount} kayıtta hata oluştu.`;
-        console.error("İçe aktarma hataları:", errorMessages);
+        console.error("İçe aktarma hataları:", errorMessages.join("\n"));
+        toast({
+            title: "Kısmi İçe Aktarma Tamamlandı",
+            description: `${description}\nDetaylar için konsolu kontrol edin.`,
+            variant: "default",
+            duration: 10000,
+         });
+      } else {
+        toast({ title: "İçe Aktarma Tamamlandı", description });
       }
-      toast({ title: "İçe Aktarma Tamamlandı", description });
       if(successCount > 0) setIsImportModalOpen(false);
 
     } catch (error: any) {
