@@ -12,7 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-} from "@/components/ui/command";
+} from "@/components/ui/command"; // Reverted to correct import path
 import {
   Popover,
   PopoverContent,
@@ -126,3 +126,4 @@ export function ProductCombobox({
     </Popover>
   );
 }
+
