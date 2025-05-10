@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem, ShipmentLog } from '@/types';
+import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem, ShipmentLog, Supplier, PurchaseOrder, PurchaseOrderItem, PurchaseOrderStatus } from '@/types';
 
 interface AppState {
   products: Product[];
@@ -9,6 +9,8 @@ interface AppState {
   productionLogs: ProductionLog[];
   customerOrders: CustomerOrder[];
   shipmentLogs: ShipmentLog[];
+  suppliers: Supplier[];
+  purchaseOrders: PurchaseOrder[];
 
   // Product actions
   addProduct: (product: Product) => void;
@@ -24,7 +26,7 @@ interface AppState {
   getBomById: (bomId: string) => BOM | undefined;
 
   // Raw Material Entry actions
-  addRawMaterialEntry: (entry: RawMaterialEntry) => void;
+  addRawMaterialEntry: (entry: Omit<RawMaterialEntry, 'id'>) => void;
   updateRawMaterialEntry: (updatedEntry: RawMaterialEntry) => void;
   deleteRawMaterialEntry: (entryId: string) => void;
 
@@ -40,9 +42,22 @@ interface AppState {
   getCustomerOrderById: (orderId: string) => CustomerOrder | undefined;
 
   // ShipmentLog actions
-  addShipmentLog: (log: ShipmentLog) => void;
+  addShipmentLog: (log: Omit<ShipmentLog, 'id'>) => void;
   updateShipmentLog: (updatedLog: ShipmentLog) => void;
   deleteShipmentLog: (logId: string) => void;
+
+  // Supplier actions
+  addSupplier: (supplier: Supplier) => void;
+  updateSupplier: (supplier: Supplier) => void;
+  deleteSupplier: (supplierId: string) => void;
+  getSupplierById: (supplierId: string) => Supplier | undefined;
+
+  // Purchase Order actions
+  addPurchaseOrder: (order: PurchaseOrder) => void;
+  updatePurchaseOrder: (order: PurchaseOrder) => void;
+  deletePurchaseOrder: (orderId: string) => void;
+  getPurchaseOrderById: (orderId: string) => PurchaseOrder | undefined;
+  updatePurchaseOrderStatus: (orderId: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -54,6 +69,8 @@ export const useStore = create<AppState>()(
       productionLogs: [],
       customerOrders: [],
       shipmentLogs: [],
+      suppliers: [],
+      purchaseOrders: [],
 
       // Product actions
       addProduct: (product) => {
@@ -61,39 +78,108 @@ export const useStore = create<AppState>()(
         if (existingProduct) {
           throw new Error(`'${product.productCode}' kodlu ürün zaten mevcut.`);
         }
-        set((state) => ({ products: [...state.products, product] }));
+        set((state) => ({ products: [...state.products, { ...product, id: crypto.randomUUID() }] }));
       },
       updateProduct: (updatedProduct) =>
         set((state) => ({
           products: state.products.map((p) => (p.id === updatedProduct.id ? updatedProduct : p)),
         })),
-      deleteProduct: (productId) =>
+      deleteProduct: (productId) => {
+        // Check if product is used in any BOM components or as a BOM main product
+        const isUsedInBom = get().boms.some(bom => bom.productId === productId || bom.components.some(c => c.productId === productId));
+        if (isUsedInBom) {
+          throw new Error("Bu ürün bir veya daha fazla Ürün Reçetesinde (BOM) kullanılıyor. Lütfen önce Ürün Reçetelerinden kaldırın.");
+        }
+        // Check if product is used in any Raw Material Entries
+        const isUsedInRawMaterialEntry = get().rawMaterialEntries.some(entry => entry.productId === productId);
+        if (isUsedInRawMaterialEntry) {
+          throw new Error("Bu ürün Hammadde Girişlerinde kullanılıyor. Lütfen önce girişleri silin.");
+        }
+        // Check if product is used in any Production Logs
+        const isUsedInProductionLog = get().productionLogs.some(log => log.productId === productId);
+        if (isUsedInProductionLog) {
+          throw new Error("Bu ürün Üretim Kayıtlarında kullanılıyor. Lütfen önce üretim kayıtlarını silin.");
+        }
+        // Check if product is used in any Customer Order Items
+        const isUsedInCustomerOrderItem = get().customerOrders.some(order => order.items.some(item => item.productId === productId));
+        if (isUsedInCustomerOrderItem) {
+            throw new Error("Bu ürün Müşteri Siparişlerinde kullanılıyor. Lütfen önce sipariş kalemlerinden kaldırın.");
+        }
+        // Check if product is used in any Shipment Logs
+        const isUsedInShipmentLog = get().shipmentLogs.some(log => log.productId === productId);
+        if (isUsedInShipmentLog) {
+            throw new Error("Bu ürün Sevkiyat Kayıtlarında kullanılıyor. Lütfen önce sevkiyat kayıtlarını silin.");
+        }
+         // Check if product is used in any Purchase Order Items
+        const isUsedInPurchaseOrderItem = get().purchaseOrders.some(order => order.items.some(item => item.productId === productId));
+        if (isUsedInPurchaseOrderItem) {
+            throw new Error("Bu ürün Satınalma Siparişlerinde kullanılıyor. Lütfen önce sipariş kalemlerinden kaldırın.");
+        }
+
         set((state) => ({
           products: state.products.filter((p) => p.id !== productId),
-        })),
+        }));
+      },
       getProductById: (productId) => get().products.find(p => p.id === productId),
       getProductByCode: (productCode) => get().products.find(p => p.productCode.toLowerCase() === productCode.toLowerCase()),
 
       // BOM actions
-      addBom: (bom) => set((state) => ({ boms: [...state.boms, bom] })),
-      updateBom: (updatedBom) =>
+      addBom: (bomData) => {
+        const mainProduct = get().getProductById(bomData.productId);
+        if (!mainProduct) throw new Error("Ana ürün bulunamadı.");
+        const name = `${mainProduct.productCode} - ${mainProduct.name} Reçetesi`;
+        const newBom: BOM = { ...bomData, id: crypto.randomUUID(), name };
+        set((state) => ({ boms: [...state.boms, newBom] }));
+      },
+      updateBom: (updatedBomData) => {
+        const mainProduct = get().getProductById(updatedBomData.productId);
+        if (!mainProduct) throw new Error("Ana ürün bulunamadı.");
+        const name = `${mainProduct.productCode} - ${mainProduct.name} Reçetesi`;
+        const updatedBom = { ...updatedBomData, name };
         set((state) => ({
           boms: state.boms.map((b) => (b.id === updatedBom.id ? updatedBom : b)),
-        })),
-      deleteBom: (bomId) =>
+        }));
+      },
+      deleteBom: (bomId) => {
+        const isUsedInProduction = get().productionLogs.some(log => log.bomId === bomId);
+        if (isUsedInProduction) {
+          throw new Error("Bu Ürün Reçetesi (BOM) bir veya daha fazla üretim kaydında kullanılıyor. Lütfen önce üretim kayıtlarını silin/değiştirin.");
+        }
         set((state) => ({
           boms: state.boms.filter((b) => b.id !== bomId),
-        })),
+        }));
+      },
       getBomById: (bomId) => get().boms.find(b => b.id === bomId),
 
       // Raw Material Entry actions
-      addRawMaterialEntry: (entry) => {
+      addRawMaterialEntry: (entryData) => {
+        const newEntry: RawMaterialEntry = { ...entryData, id: crypto.randomUUID() };
         set((state) => ({
-          rawMaterialEntries: [...state.rawMaterialEntries, entry],
+          rawMaterialEntries: [...state.rawMaterialEntries, newEntry],
           products: state.products.map((p) =>
-            p.id === entry.productId ? { ...p, stock: (p.stock || 0) + entry.quantity } : p
+            p.id === newEntry.productId ? { ...p, stock: (p.stock || 0) + newEntry.quantity } : p
           ),
         }));
+
+        if (newEntry.purchaseOrderId && newEntry.productId) {
+          const po = get().purchaseOrders.find(o => o.id === newEntry.purchaseOrderId);
+          if (po) {
+            let poItemUpdated = false;
+            const updatedItems = po.items.map(item => {
+              if (item.productId === newEntry.productId) {
+                // Ensure not to exceed ordered quantity through multiple entries (basic check)
+                const newReceived = item.receivedQuantity + newEntry.quantity;
+                poItemUpdated = true;
+                return { ...item, receivedQuantity: Math.min(newReceived, item.orderedQuantity) };
+              }
+              return item;
+            });
+            if (poItemUpdated) {
+              get().updatePurchaseOrder({ ...po, items: updatedItems });
+              get().updatePurchaseOrderStatus(po.id);
+            }
+          }
+        }
       },
       updateRawMaterialEntry: (updatedEntry) => {
         const oldEntry = get().rawMaterialEntries.find(e => e.id === updatedEntry.id);
@@ -110,9 +196,43 @@ export const useStore = create<AppState>()(
             e.id === updatedEntry.id ? updatedEntry : e
           ),
           products: state.products.map((p) =>
-            p.id === updatedEntry.productId ? { ...p, stock: (p.stock || 0) + stockAdjustment } : p
+            p.id === updatedEntry.productId ? { ...p, stock: Math.max(0, (p.stock || 0) + stockAdjustment) } : p
           ),
         }));
+
+        // Adjust PO if involved - this is complex for updates if PO/product changes.
+        // Simplified: if old entry was linked, reverse its effect. If new entry is linked, apply its effect.
+        // This needs careful handling of quantities if entry quantity itself changes.
+        // For simplicity, assume if an entry is updated, its PO link effect is re-evaluated based on new quantity.
+        // Reversing old effect:
+        if (oldEntry.purchaseOrderId && oldEntry.productId) {
+            const po = get().purchaseOrders.find(o => o.id === oldEntry.purchaseOrderId);
+            if (po) {
+                const updatedItems = po.items.map(item => {
+                    if (item.productId === oldEntry.productId) {
+                        return { ...item, receivedQuantity: Math.max(0, item.receivedQuantity - oldEntry.quantity) };
+                    }
+                    return item;
+                });
+                get().updatePurchaseOrder({ ...po, items: updatedItems });
+                get().updatePurchaseOrderStatus(po.id);
+            }
+        }
+        // Applying new effect:
+        if (updatedEntry.purchaseOrderId && updatedEntry.productId) {
+            const po = get().purchaseOrders.find(o => o.id === updatedEntry.purchaseOrderId);
+            if (po) {
+                const updatedItems = po.items.map(item => {
+                    if (item.productId === updatedEntry.productId) {
+                        const newReceived = item.receivedQuantity + updatedEntry.quantity;
+                        return { ...item, receivedQuantity: Math.min(newReceived, item.orderedQuantity) };
+                    }
+                    return item;
+                });
+                get().updatePurchaseOrder({ ...po, items: updatedItems });
+                get().updatePurchaseOrderStatus(po.id);
+            }
+        }
       },
       deleteRawMaterialEntry: (entryId) => {
         const entryToDelete = get().rawMaterialEntries.find(e => e.id === entryId);
@@ -123,9 +243,23 @@ export const useStore = create<AppState>()(
         set((state) => ({
           rawMaterialEntries: state.rawMaterialEntries.filter((e) => e.id !== entryId),
           products: state.products.map((p) =>
-            p.id === entryToDelete.productId ? { ...p, stock: (p.stock || 0) + stockAdjustment } : p
+            p.id === entryToDelete.productId ? { ...p, stock: Math.max(0, (p.stock || 0) + stockAdjustment) } : p
           ),
         }));
+
+        if (entryToDelete.purchaseOrderId && entryToDelete.productId) {
+            const po = get().purchaseOrders.find(o => o.id === entryToDelete.purchaseOrderId);
+            if (po) {
+                const updatedItems = po.items.map(item => {
+                    if (item.productId === entryToDelete.productId) {
+                        return { ...item, receivedQuantity: Math.max(0, item.receivedQuantity - entryToDelete.quantity) };
+                    }
+                    return item;
+                });
+                get().updatePurchaseOrder({ ...po, items: updatedItems });
+                get().updatePurchaseOrderStatus(po.id);
+            }
+        }
       },
 
       // Production Log actions
@@ -133,8 +267,6 @@ export const useStore = create<AppState>()(
         const bom = get().boms.find(b => b.id === log.bomId);
         if (!bom) {
           const errorMsg = "Üretim kaydı için Ürün Reçetesi (BOM) bulunamadı.";
-          console.error(errorMsg);
-          alert(errorMsg); 
           throw new Error(errorMsg);
         }
 
@@ -156,7 +288,6 @@ export const useStore = create<AppState>()(
         
         if (!possible) {
           const errorMsg = `Üretim için yeterli '${insufficientComponentName}' bileşen stoğu bulunmamaktadır.`;
-          alert(errorMsg);
           throw new Error(errorMsg);
         }
 
@@ -182,65 +313,51 @@ export const useStore = create<AppState>()(
         if (!oldLog) {
           throw new Error("Güncellenecek üretim kaydı bulunamadı.");
         }
-
-        const oldBom = boms.find(b => b.id === oldLog.bomId);
-        if (!oldBom) {
-          throw new Error("Eski üretim kaydının ürün reçetesi bulunamadı.");
+         if (oldLog.productId !== updatedLog.productId || oldLog.bomId !== updatedLog.bomId) {
+          throw new Error("Üretim kaydı güncellenirken üretilen ürün veya kullanılan reçete değiştirilemez. Lütfen kaydı silip yenisini oluşturun.");
         }
+
+
+        const bomUsed = boms.find(b => b.id === updatedLog.bomId);
+        if (!bomUsed) {
+          throw new Error("Üretim kaydının ürün reçetesi bulunamadı.");
+        }
+
+        // Calculate stock change only based on quantity difference
+        const quantityDifference = updatedLog.quantity - oldLog.quantity;
 
         let tempProducts = [...products];
+        // Adjust stock for the produced product
         tempProducts = tempProducts.map(p => {
-          if (p.id === oldLog.productId) {
-            return { ...p, stock: (p.stock || 0) - oldLog.quantity };
+          if (p.id === updatedLog.productId) {
+            return { ...p, stock: Math.max(0, (p.stock || 0) + quantityDifference) };
           }
           return p;
         });
-        oldBom.components.forEach(comp => {
-          tempProducts = tempProducts.map(p => {
-            if (p.id === comp.productId) {
-              return { ...p, stock: (p.stock || 0) + (comp.quantity * oldLog.quantity) };
-            }
-            return p;
-          });
-        });
 
-        const newBom = boms.find(b => b.id === updatedLog.bomId);
-        if (!newBom) {
-          throw new Error("Yeni üretim kaydının ürün reçetesi bulunamadı.");
-        }
-
+        // Adjust stock for components
         let possible = true;
         let insufficientComponentName = '';
-        newBom.components.forEach(comp => {
-          const product = tempProducts.find(p => p.id === comp.productId);
-          if (!product || (product.stock || 0) < comp.quantity * updatedLog.quantity) {
-            possible = false;
-            insufficientComponentName = product ? `${product.productCode} - ${product.name}` : `ID: ${comp.productId}`;
-          }
-        });
-
-        if (!possible) {
-          throw new Error(`Güncelleme başarısız: Yeni üretim için yeterli '${insufficientComponentName}' bileşen stoğu yok.`);
-        }
-
-        let finalProducts = [...tempProducts];
-        newBom.components.forEach(comp => {
-          finalProducts = finalProducts.map(p => {
+        bomUsed.components.forEach(comp => {
+          tempProducts = tempProducts.map(p => {
             if (p.id === comp.productId) {
-              return { ...p, stock: (p.stock || 0) - (comp.quantity * updatedLog.quantity) };
+              const newStock = (p.stock || 0) - (comp.quantity * quantityDifference);
+              if (newStock < 0) {
+                possible = false;
+                insufficientComponentName = `${p.productCode} - ${p.name}`;
+              }
+              return { ...p, stock: newStock };
             }
             return p;
           });
         });
-        finalProducts = finalProducts.map(p => {
-          if (p.id === updatedLog.productId) {
-            return { ...p, stock: (p.stock || 0) + updatedLog.quantity };
-          }
-          return p;
-        });
+        
+        if (!possible) {
+          throw new Error(`Güncelleme başarısız: Yeterli '${insufficientComponentName}' bileşen stoğu yok.`);
+        }
         
         set({
-          products: finalProducts,
+          products: tempProducts,
           productionLogs: productionLogs.map(l => l.id === updatedLog.id ? updatedLog : l),
         });
       },
@@ -258,6 +375,7 @@ export const useStore = create<AppState>()(
         }
 
         let updatedProducts = [...products];
+        // Add back components to stock
         bomUsed.components.forEach(comp => {
           updatedProducts = updatedProducts.map(p => {
             if (p.id === comp.productId) {
@@ -266,9 +384,10 @@ export const useStore = create<AppState>()(
             return p;
           });
         });
+        // Subtract produced product from stock
         updatedProducts = updatedProducts.map(p => {
           if (p.id === logToDelete.productId) {
-            return { ...p, stock: (p.stock || 0) - logToDelete.quantity };
+            return { ...p, stock: Math.max(0, (p.stock || 0) - logToDelete.quantity) };
           }
           return p;
         });
@@ -281,31 +400,41 @@ export const useStore = create<AppState>()(
 
       // Customer Order Actions
       addCustomerOrder: (order) => {
-        set((state) => ({ customerOrders: [...state.customerOrders, order] }));
+        set((state) => ({ customerOrders: [...state.customerOrders, { ...order, id: crypto.randomUUID() }] }));
       },
       updateCustomerOrder: (updatedOrder) =>
         set((state) => ({
           customerOrders: state.customerOrders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)),
         })),
-      deleteCustomerOrder: (orderId) =>
+      deleteCustomerOrder: (orderId) => {
+        // Check if order is used in any Shipment Logs
+        const isUsedInShipment = get().shipmentLogs.some(log => log.customerOrderId === orderId);
+        if (isUsedInShipment) {
+          throw new Error("Bu müşteri siparişi bir veya daha fazla sevkiyat kaydında kullanılıyor. Lütfen önce sevkiyatları silin/değiştirin.");
+        }
         set((state) => ({
           customerOrders: state.customerOrders.filter((o) => o.id !== orderId),
-        })),
+        }));
+      },
       getCustomerOrderById: (orderId) => get().customerOrders.find(o => o.id === orderId),
 
-      // ShipmentLog Actions
-      addShipmentLog: (log) => {
-        const product = get().products.find(p => p.id === log.productId);
+       // ShipmentLog Actions
+      addShipmentLog: (logData) => {
+        const product = get().products.find(p => p.id === logData.productId);
         if (!product) {
-          throw new Error(`Sevk edilecek ürün (ID: ${log.productId}) bulunamadı.`);
+          throw new Error(`Sevk edilecek ürün (ID: ${logData.productId}) bulunamadı.`);
         }
-        if ((product.stock || 0) < log.quantity) {
-          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için ${log.quantity} adet sevk edilemez. Mevcut stok: ${product.stock || 0}.`);
+        if (product.type !== 'mamul') {
+            throw new Error(`Sadece mamul ürünler sevk edilebilir. ${product.name} bir mamul değildir.`);
         }
+        if ((product.stock || 0) < logData.quantity) {
+          throw new Error(`Yetersiz stok: ${product.name} (${product.productCode}) için ${logData.quantity} adet sevk edilemez. Mevcut stok: ${product.stock || 0}.`);
+        }
+        const newLog: ShipmentLog = { ...logData, id: crypto.randomUUID() };
         set((state) => ({
-          shipmentLogs: [...state.shipmentLogs, log],
+          shipmentLogs: [...state.shipmentLogs, newLog],
           products: state.products.map((p) =>
-            p.id === log.productId ? { ...p, stock: (p.stock || 0) - log.quantity } : p
+            p.id === newLog.productId ? { ...p, stock: (p.stock || 0) - newLog.quantity } : p
           ),
         }));
       },
@@ -341,32 +470,25 @@ export const useStore = create<AppState>()(
       },
       deleteShipmentLog: (logId: string) => {
         const logToDelete = get().shipmentLogs.find(l => l.id === logId);
-
         if (!logToDelete) {
-          // console.error("Silinecek sevkiyat kaydı bulunamadı (store). ID:", logId);
           throw new Error("Silinecek sevkiyat kaydı bulunamadı.");
         }
         
         set(state => {
           const updatedShipmentLogs = state.shipmentLogs.filter(l => l.id !== logId);
-          let updatedProducts = state.products; // Default to current products
-
           const productToAdjust = state.products.find(p => p.id === logToDelete.productId);
 
-          if (productToAdjust) {
-            const newStock = (productToAdjust.stock || 0) + logToDelete.quantity;
-            updatedProducts = state.products.map(p =>
-              p.id === logToDelete.productId
-                ? { ...p, stock: newStock }
-                : p
-            );
-          } else {
-            // This case should ideally be handled or prevented.
-            // For now, log a warning if product not found, but still delete the log.
-            console.warn(
-              `Sevkiyat (ID: ${logId}) silindi ancak ilişkili ürün (ID: ${logToDelete.productId}) bulunamadığı için stok güncellenemedi.`
-            );
+          if (!productToAdjust) {
+             console.warn(`Sevkiyat (ID: ${logId}) silindi ancak ilişkili ürün (ID: ${logToDelete.productId}) bulunamadığı için stok güncellenemedi.`);
+             return { shipmentLogs: updatedShipmentLogs, products: state.products };
           }
+          
+          const newStock = (productToAdjust.stock || 0) + logToDelete.quantity;
+          const updatedProducts = state.products.map(p =>
+            p.id === logToDelete.productId
+              ? { ...p, stock: newStock }
+              : p
+          );
           
           return {
             shipmentLogs: updatedShipmentLogs,
@@ -374,6 +496,82 @@ export const useStore = create<AppState>()(
           };
         });
       },
+
+      // Supplier actions
+      addSupplier: (supplier) => {
+        const existingSupplier = get().suppliers.find(s => s.name.toLowerCase() === supplier.name.toLowerCase());
+        if (existingSupplier) {
+          throw new Error(`'${supplier.name}' adlı tedarikçi zaten mevcut.`);
+        }
+        set((state) => ({ suppliers: [...state.suppliers, { ...supplier, id: crypto.randomUUID() }] }));
+      },
+      updateSupplier: (updatedSupplier) =>
+        set((state) => ({
+          suppliers: state.suppliers.map((s) => (s.id === updatedSupplier.id ? updatedSupplier : s)),
+        })),
+      deleteSupplier: (supplierId) => {
+        const isUsedInPurchaseOrder = get().purchaseOrders.some(po => po.supplierId === supplierId);
+        if (isUsedInPurchaseOrder) {
+          throw new Error("Bu tedarikçi bir veya daha fazla satınalma siparişinde kullanılıyor. Lütfen önce siparişleri silin/değiştirin.");
+        }
+        const isUsedInRawMaterialEntry = get().rawMaterialEntries.some(rme => rme.supplierId === supplierId);
+        if(isUsedInRawMaterialEntry) {
+            throw new Error("Bu tedarikçi bir veya daha fazla hammadde girişinde kullanılıyor. Lütfen önce girişleri silin/değiştirin.");
+        }
+        set((state) => ({
+          suppliers: state.suppliers.filter((s) => s.id !== supplierId),
+        }));
+      },
+      getSupplierById: (supplierId) => get().suppliers.find(s => s.id === supplierId),
+
+      // Purchase Order actions
+      addPurchaseOrder: (order) => {
+        if (order.orderReference) {
+            const existingOrder = get().purchaseOrders.find(po => po.orderReference?.toLowerCase() === order.orderReference?.toLowerCase());
+            if(existingOrder) {
+                throw new Error(`'${order.orderReference}' referans numaralı satınalma siparişi zaten mevcut.`);
+            }
+        }
+        set((state) => ({ purchaseOrders: [...state.purchaseOrders, { ...order, id: crypto.randomUUID() }] }));
+      },
+      updatePurchaseOrder: (updatedOrder) =>
+        set((state) => ({
+          purchaseOrders: state.purchaseOrders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)),
+        })),
+      deletePurchaseOrder: (orderId) => {
+        // Check if PO is linked in any Raw Material Entries
+        const isUsedInRawMaterialEntry = get().rawMaterialEntries.some(entry => entry.purchaseOrderId === orderId);
+        if (isUsedInRawMaterialEntry) {
+          throw new Error("Bu satınalma siparişi bir veya daha fazla hammadde girişinde kullanılıyor. Lütfen önce girişleri güncelleyin.");
+        }
+        set((state) => ({
+          purchaseOrders: state.purchaseOrders.filter((o) => o.id !== orderId),
+        }));
+      },
+      getPurchaseOrderById: (orderId) => get().purchaseOrders.find(o => o.id === orderId),
+      updatePurchaseOrderStatus: (orderId: string) => {
+        const order = get().purchaseOrders.find(o => o.id === orderId);
+        if (!order) return;
+
+        if (order.status === 'cancelled') return; // Do not change status if cancelled
+
+        const allItemsClosed = order.items.every(item => item.receivedQuantity >= item.orderedQuantity);
+        const anyItemPartiallyReceived = order.items.some(item => item.receivedQuantity > 0 && item.receivedQuantity < item.orderedQuantity);
+        const anyItemOpen = order.items.some(item => item.receivedQuantity < item.orderedQuantity);
+
+        let newStatus: PurchaseOrderStatus = 'open';
+        if (allItemsClosed) {
+          newStatus = 'closed';
+        } else if (anyItemPartiallyReceived || (order.items.some(i => i.receivedQuantity > 0) && anyItemOpen)) {
+          newStatus = 'partially_received';
+        }
+        // else it remains 'open'
+
+        if (order.status !== newStatus) {
+          get().updatePurchaseOrder({ ...order, status: newStatus });
+        }
+      },
+
     }),
     {
       name: 'stoktakip-storage', 
@@ -410,3 +608,22 @@ export const getCustomerOrderDisplayInfoById = (orderId?: string): string => {
   if (!order) return "Bilinmeyen Sipariş";
   return `${order.customerName} - ${new Date(order.orderDate).toLocaleDateString('tr-TR')}`;
 }
+
+export const getSupplierNameById = (supplierId?: string): string => {
+  if (!supplierId) return "Bilinmeyen Tedarikçi";
+  const supplier = useStore.getState().suppliers.find(s => s.id === supplierId);
+  return supplier ? supplier.name : "Bilinmeyen Tedarikçi";
+}
+
+export const getPurchaseOrderReferenceById = (orderId?: string): string => {
+    if (!orderId) return "Sipariş Yok";
+    const order = useStore.getState().purchaseOrders.find(po => po.id === orderId);
+    if (!order) return "Bilinmeyen Satınalma Siparişi";
+    return order.orderReference || `ID: ${order.id.substring(0,8)}`;
+}
+
+// Function to check if a product is a raw material or auxiliary material
+export const isProductPurchasable = (productId: string): boolean => {
+  const product = useStore.getState().products.find(p => p.id === productId);
+  return product ? product.type === 'hammadde' || product.type === 'yardimci_malzeme' : false;
+};

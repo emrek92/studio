@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -60,18 +61,14 @@ export default function ShipmentsPage() {
   };
 
   const handleDelete = () => {
-    console.log("handleDelete called. logToDelete ID:", logToDelete); 
     if (logToDelete) {
       try {
         deleteShipmentLog(logToDelete); 
         toast({ title: "Sevkiyat Kaydı Silindi", description: "Sevkiyat kaydı başarıyla silindi." });
       } catch (error: any) {
-        console.error("Error during handleDelete:", error); 
         toast({ title: "Silme Hatası", description: error.message || "Kayıt silinirken bir hata oluştu.", variant: "destructive" });
       }
       setLogToDelete(null);
-    } else {
-      console.warn("handleDelete called but logToDelete is null.");
     }
   };
 
@@ -98,14 +95,14 @@ export default function ShipmentsPage() {
 
   const generateShipmentLogTemplate = () => {
     const headers = ["Sevk Edilen Mamul Kodu*", "Miktar*", "Tarih (GG.AA.YYYY)*", "Müşteri Sipariş ID (Opsiyonel)", "Notlar"];
-    const exampleRow = ["MAM-001", 25, "03.01.2024", "CO-123", "Acil sevkiyat"];
+    const exampleRow = ["MAM-001", 25, "03.01.2024", customerOrders.length > 0 ? customerOrders[0].id : "OPS-123", "Acil sevkiyat"];
      const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
         ["- 'Sevk Edilen Mamul Kodu' sistemde kayıtlı bir 'mamul' türünde ürünün kodu olmalıdır."],
         ["- 'Miktar' pozitif bir sayı olmalıdır ve stok miktarından fazla olamaz."],
         ["- 'Tarih' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
-        ["- 'Müşteri Sipariş ID' sistemde kayıtlı bir müşteri siparişinin ID'si olmalıdır (eğer girilirse)."],
+        ["- 'Müşteri Sipariş ID' sistemde kayıtlı bir müşteri siparişinin ID'si olmalıdır (eğer girilirse). Sistemdeki örnek ID'ler kullanılabilir."],
     ];
     downloadExcelTemplate([{ sheetName: "SevkiyatKayitlari", data: [headers, exampleRow, [], ...notes] }], "Sevkiyat_Kayit_Sablonu");
   };
@@ -142,9 +139,11 @@ export default function ShipmentsPage() {
             if (isValid(parsedDate)) return parsedDate;
             const parsedDateAlt = parse(val, "d.M.yyyy", new Date());
             if (isValid(parsedDateAlt)) return parsedDateAlt;
+             const parsedDateISO = parse(val, "yyyy-MM-dd", new Date()); // Handle YYYY-MM-DD too
+            if (isValid(parsedDateISO)) return parsedDateISO;
           }
           if (typeof val === 'number') { 
-             const excelEpochDiff = val > 60 ? 25567 : 25569;
+             const excelEpochDiff = val > 60 ? 25567 : 25569; // Excel epoch adjustment
              const date = new Date((val - excelEpochDiff) * 24 * 60 * 60 * 1000);
              if (isValid(date)) return date;
           }
@@ -155,7 +154,7 @@ export default function ShipmentsPage() {
       });
       
       for (const row of sheet) {
-        const rowIndex = sheet.indexOf(row) + 2;
+        const rowIndex = sheet.indexOf(row) + 2; // For user-friendly error messages (1-based index, +1 for header)
         const validationResult = importSchema.safeParse(row);
 
         if (validationResult.success) {
@@ -174,15 +173,14 @@ export default function ShipmentsPage() {
           if (customerOrderIdExcel && String(customerOrderIdExcel).trim() !== "") {
               customerOrderId = String(customerOrderIdExcel).trim();
               if (!allCustomerOrders.find(co => co.id === customerOrderId)) {
-                  errorMessages.push(`Satır ${rowIndex}: '${customerOrderId}' ID'li müşteri siparişi bulunamadı.`);
+                  errorMessages.push(`Satır ${rowIndex}: '${customerOrderIdExcel}' ID'li müşteri siparişi bulunamadı.`);
                   errorCount++;
                   continue;
               }
           }
           
           try {
-            const newLog: ShipmentLog = {
-              id: crypto.randomUUID(),
+            const newLog: Omit<ShipmentLog, 'id'> = {
               productId: product.id,
               quantity: data["Miktar*"],
               date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
@@ -211,7 +209,7 @@ export default function ShipmentsPage() {
             title: errorCount > 0 && successCount > 0 ? "Kısmi İçe Aktarma Tamamlandı" : "İçe Aktarma Başarısız",
             description: `${toastDescription}\nDetaylar için konsolu kontrol edin.`,
             variant: errorCount > 0 && successCount === 0 ? "destructive" : "default",
-            duration: 10000,
+            duration: errorCount > 0 ? 10000 : 5000, // Longer duration if errors
          });
       } else {
         toast({ title: "İçe Aktarma Tamamlandı", description: toastDescription });

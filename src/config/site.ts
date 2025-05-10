@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, Package, ListChecks, Truck, Factory, Warehouse, Settings, ShoppingCart, Send } from "lucide-react";
+import { LayoutDashboard, Package, ListChecks, Truck, Factory, Warehouse, Settings, ShoppingCart, Send, Users, FileText } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -30,10 +30,17 @@ export const siteConfig = {
       ],
     },
     {
+      title: "Tedarik Zinciri",
+      items: [
+        { title: "Tedarikçiler", href: "/suppliers", icon: Users },
+        { title: "Satınalma Siparişleri", href: "/purchase-orders", icon: FileText },
+        { title: "Hammadde Girişi", href: "/raw-material-entries", icon: Truck },
+      ],
+    },
+    {
       title: "Üretim",
       items: [
         { title: "Ürün Reçeteleri (BOM)", href: "/boms", icon: ListChecks },
-        { title: "Hammadde Girişi", href: "/raw-material-entries", icon: Truck },
         { title: "Üretim Kaydı", href: "/productions", icon: Factory },
       ],
     },

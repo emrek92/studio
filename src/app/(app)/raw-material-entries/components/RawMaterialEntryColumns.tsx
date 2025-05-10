@@ -2,7 +2,7 @@
 "use client";
 
 import type { RawMaterialEntry } from "@/types";
-import { getProductNameById, getProductCodeById } from "@/lib/store";
+import { getProductNameById, getProductCodeById, getSupplierNameById, getPurchaseOrderReferenceById } from "@/lib/store";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -51,9 +51,14 @@ export const getRawMaterialEntryColumns = ({ onEdit, onDelete }: RawMaterialEntr
     cell: ({ row }: { row: RawMaterialEntry }) => format(new Date(row.date), "dd/MM/yyyy", { locale: tr }),
   },
   {
-    accessorKey: "supplier",
+    accessorKey: "supplierId",
     header: "Tedarikçi",
-    cell: ({ row }: { row: RawMaterialEntry }) => row.supplier || "-",
+    cell: ({ row }: { row: RawMaterialEntry }) => getSupplierNameById(row.supplierId) || "-",
+  },
+  {
+    accessorKey: "purchaseOrderId",
+    header: "Satınalma Siparişi",
+    cell: ({ row }: { row: RawMaterialEntry }) => getPurchaseOrderReferenceById(row.purchaseOrderId) || "-",
   },
   {
     accessorKey: "notes",

@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { RawMaterialEntryForm } from "./components/RawMaterialEntryForm";
 import { getRawMaterialEntryColumns } from "./components/RawMaterialEntryColumns";
-import { useStore } from "@/lib/store";
+import { useStore, getSupplierNameById, getPurchaseOrderReferenceById } from "@/lib/store";
 import type { RawMaterialEntry, Product } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud } from "lucide-react";
@@ -28,9 +28,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { format, isValid, parse } from "date-fns"; // For date parsing in import
 
 export default function RawMaterialEntriesPage() {
-  const { rawMaterialEntries, products, addRawMaterialEntry, deleteRawMaterialEntry } = useStore();
+  const { rawMaterialEntries, products, suppliers, purchaseOrders, addRawMaterialEntry, deleteRawMaterialEntry } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingEntry, setEditingEntry] = React.useState<RawMaterialEntry | undefined>(undefined);
@@ -63,17 +64,25 @@ export default function RawMaterialEntriesPage() {
     }
   };
   
-  const columns = React.useMemo(() => getRawMaterialEntryColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
+  const columns = React.useMemo(() => getRawMaterialEntryColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm, suppliers, purchaseOrders]);
 
 
   const generateRawMaterialEntryTemplate = () => {
-    const headers = ["Hammadde/Yardımcı Malzeme Kodu*", "Hammadde/Yardımcı Malzeme Adı - Bilgilendirme", "Miktar*", "Tarih (GG.AA.YYYY)*", "Tedarikçi", "Notlar"];
-    const exampleRow = ["HAM-001", "Örnek Hammadde X", 150, "01.01.2024", "ABC Tedarikçi", "İlk parti alımı"];
+    const headers = ["Hammadde/Yardımcı Malzeme Kodu*", "Miktar*", "Tarih (GG.AA.YYYY)*", "Tedarikçi Adı (Opsiyonel)", "Satınalma Sipariş ID (Opsiyonel)", "Notlar"];
+    const exampleProduct = products.find(p => p.type === 'hammadde' || p.type === 'yardimci_malzeme');
+    const exampleProductCode = exampleProduct ? exampleProduct.productCode : "HAM-001";
+    const exampleSupplierName = suppliers.length > 0 ? suppliers[0].name : "ABC Tedarik";
+    const examplePO = purchaseOrders.find(po => po.supplierId === (suppliers.length > 0 ? suppliers[0].id : "") && (po.status === 'open' || po.status === 'partially_received'));
+    const examplePOId = examplePO ? examplePO.id : "PO_ID_ORNEK";
+
+
+    const exampleRow = [exampleProductCode, 150, "01.01.2024", exampleSupplierName, examplePOId, "İlk parti alımı"];
     const notes = [
         ["Notlar:"],
         ["- * ile işaretli alanlar zorunludur."],
         ["- 'Hammadde/Yardımcı Malzeme Kodu' sistemde kayıtlı bir 'hammadde' veya 'yardimci_malzeme' türünde ürünün kodu olmalıdır."],
-        ["- 'Hammadde/Yardımcı Malzeme Adı' sadece bilgilendirme amaçlıdır, içe aktarımda dikkate alınmaz."],
+        ["- 'Tedarikçi Adı' sistemde kayıtlı bir tedarikçi adı olmalıdır (eğer girilirse)."],
+        ["- 'Satınalma Sipariş ID' sistemde kayıtlı ve ilgili tedarikçiye ait bir satınalma siparişinin ID'si olmalıdır (eğer girilirse)."],
         ["- 'Miktar' pozitif bir sayı olmalıdır."],
         ["- 'Tarih' GG.AA.YYYY formatında veya Excel'in tarih formatında olmalıdır."],
     ];
@@ -94,16 +103,34 @@ export default function RawMaterialEntriesPage() {
       let errorCount = 0;
       const errorMessages: string[] = [];
       const allProducts = useStore.getState().products;
+      const allSuppliers = useStore.getState().suppliers;
+      const allPurchaseOrders = useStore.getState().purchaseOrders;
 
       const importSchema = z.object({
         "Hammadde/Yardımcı Malzeme Kodu*": z.string().min(1, "Hammadde ürün kodu zorunludur."),
         "Miktar*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
-        "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
-        "Tedarikçi": z.string().optional().nullable(),
+        "Tarih (GG.AA.YYYY)*": z.preprocess(val => {
+          if (val instanceof Date && isValid(val)) return val;
+          if (typeof val === 'string') {
+            const parsedDate = parse(val, "dd.MM.yyyy", new Date());
+            if (isValid(parsedDate)) return parsedDate;
+            const parsedDateAlt = parse(val, "d.M.yyyy", new Date());
+            if (isValid(parsedDateAlt)) return parsedDateAlt;
+          }
+          if (typeof val === 'number') { 
+             const excelEpochDiff = val > 60 ? 25567 : 25569;
+             const date = new Date((val - excelEpochDiff) * 24 * 60 * 60 * 1000);
+             if (isValid(date)) return date;
+          }
+          return undefined; 
+        }, z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir (örn: 01.12.2023 veya Excel tarih formatı)."}) })),
+        "Tedarikçi Adı (Opsiyonel)": z.string().optional().nullable(),
+        "Satınalma Sipariş ID (Opsiyonel)": z.string().optional().nullable(),
         "Notlar": z.string().optional().nullable(),
       });
 
       for (const row of sheet) {
+        const rowIndex = sheet.indexOf(row) + 2;
         const validationResult = importSchema.safeParse(row);
         if (validationResult.success) {
           const data = validationResult.data;
@@ -111,29 +138,63 @@ export default function RawMaterialEntriesPage() {
           const product = findProductByCode(productCode, allProducts);
 
           if (!product || (product.type !== 'hammadde' && product.type !== 'yardimci_malzeme')) {
-            errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${productCode}' kodlu hammadde/yardımcı malzeme bulunamadı veya türü yanlış.`);
+            errorMessages.push(`Satır ${rowIndex}: '${productCode}' kodlu hammadde/yardımcı malzeme bulunamadı veya türü yanlış.`);
             errorCount++;
             continue;
           }
+
+          let supplierId: string | undefined = undefined;
+          if (data["Tedarikçi Adı (Opsiyonel)"]) {
+            const supplier = allSuppliers.find(s => s.name.toLowerCase() === data["Tedarikçi Adı (Opsiyonel)"]!.toLowerCase());
+            if (!supplier) {
+                errorMessages.push(`Satır ${rowIndex}: '${data["Tedarikçi Adı (Opsiyonel)"]}' adlı tedarikçi bulunamadı.`);
+                errorCount++;
+                continue;
+            }
+            supplierId = supplier.id;
+          }
+
+          let purchaseOrderId: string | undefined = undefined;
+          if (data["Satınalma Sipariş ID (Opsiyonel)"]) {
+            const po = allPurchaseOrders.find(p => p.id === data["Satınalma Sipariş ID (Opsiyonel)"]! || p.orderReference === data["Satınalma Sipariş ID (Opsiyonel)"]!);
+            if (!po) {
+                errorMessages.push(`Satır ${rowIndex}: '${data["Satınalma Sipariş ID (Opsiyonel)"]}' ID/referanslı satınalma siparişi bulunamadı.`);
+                errorCount++;
+                continue;
+            }
+            if (supplierId && po.supplierId !== supplierId) {
+                 errorMessages.push(`Satır ${rowIndex}: Satınalma siparişi ('${data["Satınalma Sipariş ID (Opsiyonel)"]}') belirtilen tedarikçiye ('${data["Tedarikçi Adı (Opsiyonel)"]}') ait değil.`);
+                 errorCount++;
+                 continue;
+            }
+            if (!po.items.some(item => item.productId === product.id)) {
+                errorMessages.push(`Satır ${rowIndex}: Satınalma siparişi ('${data["Satınalma Sipariş ID (Opsiyonel)"]}') '${product.productCode}' ürününü içermiyor.`);
+                errorCount++;
+                continue;
+            }
+            purchaseOrderId = po.id;
+          }
+
+
           try {
-            const newEntry: RawMaterialEntry = {
-              id: crypto.randomUUID(),
+            const newEntry: Omit<RawMaterialEntry, 'id'> = {
               productId: product.id,
               quantity: data["Miktar*"],
               date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
-              supplier: data["Tedarikçi"] || undefined,
+              supplierId: supplierId,
+              purchaseOrderId: purchaseOrderId,
               notes: data["Notlar"] || undefined,
             };
             addRawMaterialEntry(newEntry);
             successCount++;
           } catch (e:any) {
-             errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${productCode}' için giriş eklenirken hata: ${e.message}`);
+             errorMessages.push(`Satır ${rowIndex}: '${productCode}' için giriş eklenirken hata: ${e.message}`);
              errorCount++;
           }
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
-           errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: ${row["Hammadde/Yardımcı Malzeme Kodu*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
+           errorMessages.push(`Satır ${rowIndex}: ${row["Hammadde/Yardımcı Malzeme Kodu*"] || 'Bilinmeyen Kayıt'} - ${errors}`);
         }
       }
 
@@ -178,7 +239,7 @@ export default function RawMaterialEntriesPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> Yeni Giriş Ekle
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent className="sm:max-w-lg"> {/* Wider for more fields */}
               <RawMaterialEntryForm
                 entry={editingEntry}
                 onSuccess={() => {
@@ -198,7 +259,7 @@ export default function RawMaterialEntriesPage() {
             <AlertDialogHeader>
               <AlertDialogTitle>Hammadde Girişini Silmek İstediğinize Emin Misiniz?</AlertDialogTitle>
               <AlertDialogDescription>
-                Bu işlem geri alınamaz. Bu hammadde girişi silinecek ve stok miktarı güncellenecektir.
+                Bu işlem geri alınamaz. Bu hammadde girişi silinecek ve stok miktarı güncellenecektir. Varsa, bağlı satınalma siparişindeki teslim alınan miktar da düşürülecektir.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

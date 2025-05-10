@@ -3,6 +3,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import * as React from "react";
 import * as z from "zod";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,8 +25,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useStore } from "@/lib/store";
-import type { RawMaterialEntry } from "@/types";
+import { useStore, getSupplierNameById, getPurchaseOrderReferenceById } from "@/lib/store";
+import type { RawMaterialEntry, PurchaseOrder, PurchaseOrderItem } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
@@ -33,13 +34,27 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { tr } from "date-fns/locale";
 
+const NO_SUPPLIER_SELECTED_VALUE = "__no_supplier__";
+const NO_PURCHASE_ORDER_SELECTED_VALUE = "__no_purchase_order__";
+
+
 const rawMaterialEntryFormSchema = z.object({
-  productId: z.string().min(1, "Hammadde seçilmelidir."),
+  productId: z.string().min(1, "Hammadde/Yardımcı Malzeme seçilmelidir."),
   quantity: z.coerce.number().positive("Miktar pozitif olmalıdır."),
   date: z.date({ required_error: "Tarih seçilmelidir." }),
-  supplier: z.string().optional(),
+  supplierId: z.string().optional(),
+  purchaseOrderId: z.string().optional(),
   notes: z.string().optional(),
+}).refine(data => {
+    if (data.purchaseOrderId && data.purchaseOrderId !== NO_PURCHASE_ORDER_SELECTED_VALUE && (!data.supplierId || data.supplierId === NO_SUPPLIER_SELECTED_VALUE)) {
+        return false; // purchaseOrderId requires supplierId
+    }
+    return true;
+}, {
+    message: "Satınalma siparişi seçmek için önce tedarikçi seçmelisiniz.",
+    path: ["purchaseOrderId"],
 });
+
 
 type RawMaterialEntryFormValues = z.infer<typeof rawMaterialEntryFormSchema>;
 
@@ -49,7 +64,7 @@ interface RawMaterialEntryFormProps {
 }
 
 export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormProps) {
-  const { products, addRawMaterialEntry, updateRawMaterialEntry } = useStore();
+  const { products, suppliers, purchaseOrders, addRawMaterialEntry, updateRawMaterialEntry } = useStore();
   const { toast } = useToast();
 
   const rawMaterials = products.filter(p => p.type === 'hammadde' || p.type === 'yardimci_malzeme');
@@ -57,34 +72,85 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
   const form = useForm<RawMaterialEntryFormValues>({
     resolver: zodResolver(rawMaterialEntryFormSchema),
     defaultValues: entry
-      ? { ...entry, date: new Date(entry.date), supplier: entry.supplier || "", notes: entry.notes || "" }
+      ? { 
+          ...entry, 
+          date: new Date(entry.date), 
+          supplierId: entry.supplierId || NO_SUPPLIER_SELECTED_VALUE, 
+          purchaseOrderId: entry.purchaseOrderId || NO_PURCHASE_ORDER_SELECTED_VALUE,
+          notes: entry.notes || "" 
+        }
       : {
           productId: "",
-          quantity: 0,
+          quantity: 1,
           date: new Date(),
-          supplier: "",
+          supplierId: NO_SUPPLIER_SELECTED_VALUE,
+          purchaseOrderId: NO_PURCHASE_ORDER_SELECTED_VALUE,
           notes: "",
         },
   });
 
+  const selectedSupplierId = form.watch("supplierId");
+  const selectedProductId = form.watch("productId");
+  const selectedPurchaseOrderId = form.watch("purchaseOrderId");
+
+  const availablePurchaseOrders = React.useMemo(() => {
+    if (!selectedSupplierId || selectedSupplierId === NO_SUPPLIER_SELECTED_VALUE) return [];
+    return purchaseOrders.filter(po => 
+        po.supplierId === selectedSupplierId &&
+        (po.status === 'open' || po.status === 'partially_received') &&
+        po.items.some(item => item.productId === selectedProductId && item.orderedQuantity > item.receivedQuantity)
+    );
+  }, [selectedSupplierId, selectedProductId, purchaseOrders]);
+
+  React.useEffect(() => {
+    // Reset purchaseOrderId if supplier changes or product changes and no valid PO exists
+    if (!availablePurchaseOrders.find(po => po.id === form.getValues("purchaseOrderId"))) {
+        form.setValue("purchaseOrderId", NO_PURCHASE_ORDER_SELECTED_VALUE);
+    }
+  }, [selectedSupplierId, selectedProductId, availablePurchaseOrders, form]);
+
+  // Get remaining quantity for a product in a selected PO
+  const getPoRemainingQuantity = () => {
+    if (selectedPurchaseOrderId && selectedPurchaseOrderId !== NO_PURCHASE_ORDER_SELECTED_VALUE && selectedProductId) {
+        const po = purchaseOrders.find(p => p.id === selectedPurchaseOrderId);
+        const item = po?.items.find(i => i.productId === selectedProductId);
+        if (item) {
+            return item.orderedQuantity - item.receivedQuantity;
+        }
+    }
+    return null;
+  }
+  const remainingPoQuantity = getPoRemainingQuantity();
+
+
   function onSubmit(data: RawMaterialEntryFormValues) {
     try {
-      const entryDataWithISOStringDate = {
+      if (data.purchaseOrderId && data.purchaseOrderId !== NO_PURCHASE_ORDER_SELECTED_VALUE && selectedProductId) {
+        const po = purchaseOrders.find(p => p.id === data.purchaseOrderId);
+        const item = po?.items.find(i => i.productId === selectedProductId);
+        if (item && data.quantity > (item.orderedQuantity - item.receivedQuantity)) {
+            toast({
+                title: "Miktar Hatası",
+                description: `Girilen miktar (${data.quantity}), siparişteki kalan miktarı (${item.orderedQuantity - item.receivedQuantity}) aşıyor.`,
+                variant: "destructive",
+            });
+            return;
+        }
+      }
+
+      const entryDataSubmit = {
         ...data,
         date: data.date.toISOString(),
         notes: data.notes || undefined, 
-        supplier: data.supplier || undefined,
+        supplierId: data.supplierId === NO_SUPPLIER_SELECTED_VALUE ? undefined : data.supplierId,
+        purchaseOrderId: data.purchaseOrderId === NO_PURCHASE_ORDER_SELECTED_VALUE ? undefined : data.purchaseOrderId,
       };
 
       if (entry) {
-        updateRawMaterialEntry({ ...entry, ...entryDataWithISOStringDate });
+        updateRawMaterialEntry({ ...entry, ...entryDataSubmit });
         toast({ title: "Hammadde Girişi Güncellendi", description: `Giriş başarıyla güncellendi.` });
       } else {
-        const newEntry: RawMaterialEntry = {
-          id: crypto.randomUUID(),
-          ...entryDataWithISOStringDate,
-        };
-        addRawMaterialEntry(newEntry);
+        addRawMaterialEntry(entryDataSubmit);
         toast({ title: "Hammadde Girişi Eklendi", description: `Yeni hammadde girişi başarıyla eklendi.` });
       }
       onSuccess();
@@ -112,8 +178,8 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
               <FormLabel>Hammadde/Yardımcı Malzeme</FormLabel>
               <Select 
                 onValueChange={field.onChange} 
-                defaultValue={field.value}
-                disabled={!!entry} // Disable product change when editing
+                value={field.value}
+                disabled={!!entry} 
               >
                 <FormControl>
                   <SelectTrigger>
@@ -136,6 +202,68 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
             </FormItem>
           )}
         />
+        
+        <FormField
+          control={form.control}
+          name="supplierId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Tedarikçi (Opsiyonel)</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value || NO_SUPPLIER_SELECTED_VALUE}>
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Tedarikçi seçin" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={NO_SUPPLIER_SELECTED_VALUE}>Tedarikçi Yok</SelectItem>
+                  {suppliers.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="purchaseOrderId"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Satınalma Siparişi (Opsiyonel)</FormLabel>
+              <Select 
+                onValueChange={field.onChange} 
+                value={field.value || NO_PURCHASE_ORDER_SELECTED_VALUE}
+                disabled={!selectedSupplierId || selectedSupplierId === NO_SUPPLIER_SELECTED_VALUE || !selectedProductId || availablePurchaseOrders.length === 0}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder={
+                        !selectedSupplierId || selectedSupplierId === NO_SUPPLIER_SELECTED_VALUE ? "Önce tedarikçi seçin" :
+                        !selectedProductId ? "Önce ürün seçin" :
+                        availablePurchaseOrders.length === 0 ? "Uygun satınalma siparişi yok" :
+                        "Satınalma siparişi seçin"
+                    } />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={NO_PURCHASE_ORDER_SELECTED_VALUE}>Satınalma Siparişi Yok</SelectItem>
+                  {availablePurchaseOrders.map((po) => (
+                    <SelectItem key={po.id} value={po.id}>
+                      {po.orderReference || `Sipariş ID: ${po.id.substring(0,8)}`} (Kalan: {po.items.find(i=>i.productId === selectedProductId)?.orderedQuantity - po.items.find(i=>i.productId === selectedProductId)?.receivedQuantity})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
 
         <FormField
           control={form.control}
@@ -146,6 +274,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
               <FormControl>
                 <Input type="number" placeholder="0" {...field} />
               </FormControl>
+               {remainingPoQuantity !== null && <p className="text-xs text-muted-foreground">Seçili siparişte bu üründen kalan miktar: {remainingPoQuantity}</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -192,20 +321,6 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           )}
         />
         
-        <FormField
-          control={form.control}
-          name="supplier"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Tedarikçi (İsteğe Bağlı)</FormLabel>
-              <FormControl>
-                <Input placeholder="Tedarikçi adı" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <FormField
           control={form.control}
           name="notes"
