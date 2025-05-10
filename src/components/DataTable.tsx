@@ -16,11 +16,12 @@ interface DataTableProps<TData, TValue> {
     accessorKey?: keyof TData;
     header: React.ReactNode;
     cell: (props: { row: TData, getValue?: () => any }) => React.ReactNode;
+    id?: string; // Added for explicit column id if needed
   }[];
   data: TData[];
 }
 
-export function DataTable<TData, TValue>({
+export function DataTable<TData extends { id?: string }, TValue>({
   columns,
   data,
 }: DataTableProps<TData, TValue>) {
@@ -40,16 +41,16 @@ export function DataTable<TData, TValue>({
           <TableHeader>
             <TableRow>
               {columns.map((column, index) => (
-                <TableHead key={index}>{column.header}</TableHead>
+                <TableHead key={column.id || (typeof column.header === 'string' ? column.header : index)}>{column.header}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
           <TableBody>
             {paginatedData.length ? (
               paginatedData.map((row, rowIndex) => (
-                <TableRow key={rowIndex}>
+                <TableRow key={row.id || rowIndex}>
                   {columns.map((column, colIndex) => (
-                    <TableCell key={colIndex}>
+                    <TableCell key={column.id ? `${row.id || rowIndex}-${column.id}` : colIndex}>
                       {column.cell({ row, getValue: column.accessorKey ? () => row[column.accessorKey!] : undefined })}
                     </TableCell>
                   ))}
