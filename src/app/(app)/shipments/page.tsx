@@ -11,12 +11,13 @@ import {
 } from "@/components/ui/dialog";
 import { ShipmentLogForm } from "./components/ShipmentLogForm";
 import { getShipmentLogColumns } from "./components/ShipmentLogColumns";
-import { useStore, findProductByCode, getCustomerOrderDisplayInfoById } from "@/lib/store";
+import { useStore, getCustomerOrderDisplayInfoById } from "@/lib/store";
+import { findProductByCode, downloadExcelTemplate, parseExcelFile as parseExcelFileUtil } from "@/lib/excelUtils"; // Corrected import
 import type { ShipmentLog } from "@/types";
 import { DataTable } from "@/components/DataTable";
 import { PlusCircle, UploadCloud, CalendarIcon, XCircle } from "lucide-react";
 import { ExcelImportDialog } from "@/components/ExcelImportDialog";
-import { downloadExcelTemplate, parseExcelFile } from "@/lib/excelUtils";
+// import { downloadExcelTemplate, parseExcelFile as parseExcelFileUtil } from "@/lib/excelUtils"; // Renamed to avoid conflict - ALREADY CORRECTED ABOVE
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -109,7 +110,7 @@ export default function ShipmentsPage() {
 
   const handleShipmentLogImport = async (file: File) => {
     try {
-      const parsedData = await parseExcelFile(file);
+      const parsedData = await parseExcelFileUtil(file);
       const sheet = parsedData["SevkiyatKayitlari"];
 
       if (!sheet) {
@@ -331,3 +332,4 @@ export default function ShipmentsPage() {
     </div>
   );
 }
+
