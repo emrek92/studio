@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import type { DateRange } from "react-day-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,7 +45,7 @@ export default function ProductionLogsPage() {
   const [logToDelete, setLogToDelete] = React.useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
   const { toast } = useToast();
-  const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(undefined);
+  const [dateRange, setDateRange] = React.useState<DateRange | undefined>(undefined);
 
   React.useEffect(() => {
     setIsMounted(true);
@@ -71,22 +72,28 @@ export default function ProductionLogsPage() {
     }
   };
 
-  const columns = React.useMemo(() => getProductionLogColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, boms]);
+  const columns = React.useMemo(() => getProductionLogColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [products, boms, handleEdit, handleDeleteConfirm]);
 
 
   const logsToDisplay = React.useMemo(() => {
-    if (!selectedDate) {
-      return []; 
-    }
-    return productionLogs
-      .filter(log => {
+    let filtered = [...productionLogs]; 
+
+    if (dateRange?.from) {
+      const rangeStart = new Date(dateRange.from);
+      rangeStart.setHours(0, 0, 0, 0);
+      // If only 'from' is selected, 'to' might be undefined. Treat 'to' as the same day as 'from' in that case.
+      const rangeEnd = dateRange.to ? new Date(dateRange.to) : new Date(dateRange.from);
+      rangeEnd.setHours(23, 59, 59, 999);
+
+      filtered = filtered.filter(log => {
         const logDate = new Date(log.date);
-        return logDate.getFullYear() === selectedDate.getFullYear() &&
-               logDate.getMonth() === selectedDate.getMonth() &&
-               logDate.getDate() === selectedDate.getDate();
-      })
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [productionLogs, selectedDate]);
+        return logDate >= rangeStart && logDate <= rangeEnd;
+      });
+    }
+    // If no dateRange or dateRange.from is undefined, all logs are shown.
+
+    return filtered.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [productionLogs, dateRange]);
 
 
   const generateProductionLogTemplate = () => {
@@ -138,14 +145,22 @@ export default function ProductionLogsPage() {
           if (typeof val === 'string') {
             const parsedDate = parse(val, "dd.MM.yyyy", new Date());
             if (isValid(parsedDate)) return parsedDate;
+             // Try another common format if the first fails
+            const parsedDateAlt = parse(val, "d.M.yyyy", new Date());
+            if (isValid(parsedDateAlt)) return parsedDateAlt;
           }
+          // Excel date number handling (simplified)
           if (typeof val === 'number') { 
-            const excelEpoch = new Date(1899, 11, 30); 
-            const jsDate = new Date(excelEpoch.getTime() + (val - (val > 59 ? 1 : 0) ) * 24 * 60 * 60 * 1000); // Excel leap year bug for 1900
-            if (isValid(jsDate)) return jsDate;
+             // Excel stores dates as serial numbers. Day 1 is Jan 1, 1900.
+             // JavaScript's epoch is Jan 1, 1970.
+             // Number of days between 1/1/1900 and 1/1/1970 is 25569 (or 25567 if 1900 is not a leap year in Excel's logic, Excel incorrectly treats 1900 as a leap year)
+             // For dates after 1900-02-28, Excel date number is 2 days more than actual.
+             const excelEpochDiff = val > 60 ? 25567 : 25569;
+             const date = new Date((val - excelEpochDiff) * 24 * 60 * 60 * 1000);
+             if (isValid(date)) return date;
           }
           return undefined; 
-        }, z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir (GG.AA.YYYY)."}) })),
+        }, z.date({ errorMap: (issue, ctx) => ({ message: "Geçerli bir tarih girilmelidir (örn: 01.12.2023 veya Excel tarih formatı)."}) })),
         "Notlar": z.string().optional().nullable(),
       });
       
@@ -256,34 +271,47 @@ export default function ProductionLogsPage() {
       </div>
 
       <div className="flex items-center gap-2 mb-4 py-4 border-y">
-        <Label htmlFor="date-filter" className="text-sm font-medium">Tarihe Göre Filtrele:</Label>
+        <Label htmlFor="date-range-filter" className="text-sm font-medium">Tarih Aralığına Göre Filtrele:</Label>
         <Popover>
           <PopoverTrigger asChild>
             <Button
-              id="date-filter"
+              id="date-range-filter"
               variant={"outline"}
               className={cn(
-                "w-[240px] justify-start text-left font-normal",
-                !selectedDate && "text-muted-foreground"
+                "w-[280px] justify-start text-left font-normal", // Adjusted width
+                !dateRange?.from && "text-muted-foreground"
               )}
             >
               <CalendarIcon className="mr-2 h-4 w-4" />
-              {selectedDate ? format(selectedDate, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
+              {dateRange?.from ? (
+                dateRange.to ? (
+                  <>
+                    {format(dateRange.from, "dd MMM, yyyy", { locale: tr })} -{" "}
+                    {format(dateRange.to, "dd MMM, yyyy", { locale: tr })}
+                  </>
+                ) : (
+                  format(dateRange.from, "dd MMM, yyyy", { locale: tr })
+                )
+              ) : (
+                <span>Tarih Aralığı Seçin</span>
+              )}
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0">
+          <PopoverContent className="w-auto p-0" align="start">
             <Calendar
-              mode="single"
-              selected={selectedDate}
-              onSelect={setSelectedDate}
               initialFocus
+              mode="range"
+              defaultMonth={dateRange?.from}
+              selected={dateRange}
+              onSelect={setDateRange}
+              numberOfMonths={1} // Can be 1 or 2
               locale={tr}
               disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
             />
           </PopoverContent>
         </Popover>
-        {selectedDate && (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedDate(undefined)} className="text-muted-foreground hover:text-destructive">
+        {(dateRange?.from) && (
+          <Button variant="ghost" size="sm" onClick={() => setDateRange(undefined)} className="text-muted-foreground hover:text-destructive">
             <XCircle className="mr-1 h-4 w-4" />
             Filtreyi Temizle
           </Button>
@@ -322,3 +350,5 @@ export default function ProductionLogsPage() {
     </div>
   );
 }
+
+    
