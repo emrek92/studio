@@ -25,7 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { useStore, getCustomerOrderDisplayInfoById } from "@/lib/store";
+import { useStore, getCustomerOrderDisplayInfoById, getProductUnitById } from "@/lib/store";
 import type { ShipmentLog, Product, CustomerOrder } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { CalendarIcon } from "lucide-react";
@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { ProductCombobox } from "@/components/ProductCombobox";
 
 const NO_CUSTOMER_ORDER_SELECTED_VALUE = "__no_customer_order__";
 
@@ -68,7 +69,7 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
         }
       : {
           productId: "",
-          quantity: 1, // Default to 1 instead of 0
+          quantity: 1, 
           date: new Date(),
           customerOrderId: NO_CUSTOMER_ORDER_SELECTED_VALUE,
           notes: "",
@@ -114,27 +115,14 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Sevk Edilen Ürün (Mamul)</FormLabel>
-              <Select 
-                onValueChange={field.onChange} 
+              <ProductCombobox
+                products={shippableProducts}
                 value={field.value}
+                onChange={field.onChange}
+                placeholder="Mamul seçin"
                 disabled={!!log} 
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Mamul seçin" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {shippableProducts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{p.name} (Stok: {p.stock})</span>
-                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                searchPlaceholder="Mamul kodu veya adı ara..."
+              />
               {!!log && <p className="text-xs text-muted-foreground">Ürün, sevkiyat düzenlenirken değiştirilemez.</p>}
               <FormMessage />
             </FormItem>
@@ -146,7 +134,7 @@ export function ShipmentLogForm({ log, onSuccess }: ShipmentLogFormProps) {
           name="quantity"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Sevk Miktarı</FormLabel>
+              <FormLabel>Sevk Miktarı ({getProductUnitById(form.getValues("productId")) || 'Birim'})</FormLabel>
               <FormControl>
                 <Input type="number" placeholder="1" {...field} />
               </FormControl>

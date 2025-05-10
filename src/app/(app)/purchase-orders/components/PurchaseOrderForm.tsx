@@ -34,11 +34,11 @@ import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { ProductCombobox } from "@/components/ProductCombobox";
 
 const purchaseOrderItemSchema = z.object({
   productId: z.string().min(1, "Ürün seçilmelidir."),
   orderedQuantity: z.coerce.number().positive("Miktar pozitif bir sayı olmalıdır."),
-  // receivedQuantity will be handled by store, not directly in form for new/edit
 });
 
 const purchaseOrderFormSchema = z.object({
@@ -79,7 +79,7 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
           ...order, 
           orderDate: new Date(order.orderDate),
           expectedDeliveryDate: order.expectedDeliveryDate ? new Date(order.expectedDeliveryDate) : null,
-          items: order.items.map(item => ({ productId: item.productId, orderedQuantity: item.orderedQuantity })), // Don't bring receivedQuantity to form
+          items: order.items.map(item => ({ productId: item.productId, orderedQuantity: item.orderedQuantity })), 
         } 
       : {
           orderReference: "",
@@ -98,7 +98,6 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
   });
 
   const isEditing = !!order;
-  // Disable status change if order has received items, unless it's to cancel.
   const canChangeStatus = isEditing ? (order.items.every(i => i.receivedQuantity === 0) || form.getValues("status") === 'cancelled') : true;
 
 
@@ -112,7 +111,6 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
       };
       
       if (order) {
-        // Preserve received quantities when updating
         const updatedItems = orderDataSubmit.items.map(formItem => {
             const existingItem = order.items.find(i => i.productId === formItem.productId);
             return {
@@ -121,7 +119,7 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
             };
         });
         updatePurchaseOrder({ ...order, ...orderDataSubmit, items: updatedItems });
-        updatePurchaseOrderStatus(order.id); // Recalculate status based on items
+        updatePurchaseOrderStatus(order.id); 
         toast({ title: "Satınalma Siparişi Güncellendi", description: `Sipariş başarıyla güncellendi.` });
       } else {
         const newOrderItems = orderDataSubmit.items.map(item => ({ ...item, receivedQuantity: 0 }));
@@ -218,7 +216,6 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
                         onSelect={field.onChange}
                         initialFocus
                         locale={tr}
-                        // disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
                     />
                     </PopoverContent>
                 </Popover>
@@ -258,7 +255,6 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
                         onSelect={(date) => field.onChange(date ?? null)}
                         initialFocus
                         locale={tr}
-                        // disabled={(date) => date < new Date(form.getValues("orderDate")) || date < new Date("1900-01-01")}
                     />
                     </PopoverContent>
                 </Popover>
@@ -327,23 +323,13 @@ export function PurchaseOrderForm({ order, onSuccess }: PurchaseOrderFormProps) 
                   render={({ field: itemField }) => (
                     <FormItem>
                       <FormLabel>Ürün (Hammadde/Yard. Mlz.)</FormLabel>
-                      <Select onValueChange={itemField.onChange} value={itemField.value} disabled={isEditing && order?.items[index]?.receivedQuantity > 0}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Ürün seçin" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {purchasableProducts.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              <div className="flex flex-col">
-                                <span className="font-medium text-sm">{p.name}</span>
-                                {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                       <ProductCombobox
+                        products={purchasableProducts}
+                        value={itemField.value}
+                        onChange={itemField.onChange}
+                        placeholder="Ürün seçin"
+                        disabled={isEditing && order?.items[index]?.receivedQuantity > 0}
+                      />
                       {isEditing && order?.items[index]?.receivedQuantity > 0 && <p className="text-xs text-muted-foreground">Teslim alınmış ürün değiştirilemez.</p>}
                       <FormMessage />
                     </FormItem>

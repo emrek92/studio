@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { tr } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { ProductCombobox } from "@/components/ProductCombobox";
 
 const productionLogFormSchema = z.object({
   productId: z.string().min(1, "Ürün seçilmelidir."),
@@ -75,21 +76,15 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
   }, [selectedProductId, boms]);
 
   React.useEffect(() => {
-    // If editing and the log's bomId is valid for the selected product, keep it.
-    // Otherwise, if the selected product changes or has no/different BOMs, reset bomId.
     if (log && log.productId === selectedProductId && availableBoms.find(b => b.id === log.bomId)) {
-        // bomId is already set by defaultValues or is valid, do nothing to override
-    } else if (selectedProductId && availableBoms.length > 0) {
+       // Valid bomId already set
+    } else if (selectedProductId) {
       const currentBomId = form.getValues("bomId");
       if (!availableBoms.find(b => b.id === currentBomId)) {
-        // If current bomId is not in availableBoms, reset it.
-        // If it's a new form or product changed, it might pick the first or be empty.
-        // For now, just ensuring it's valid or empty.
-        // form.setValue("bomId", availableBoms[0].id); // Optionally select the first
-         form.setValue("bomId", ""); 
+        form.setValue("bomId", ""); // Reset if current BOM is not valid for new product
       }
-    } else if (selectedProductId && availableBoms.length === 0) {
-        form.setValue("bomId", "");
+    } else {
+        form.setValue("bomId", ""); // No product selected, no BOM
     }
   }, [selectedProductId, availableBoms, form, log]);
 
@@ -99,7 +94,7 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
       const logDataWithISOStringDate = {
         ...data,
         date: data.date.toISOString(),
-        notes: data.notes || undefined, // Ensure notes is undefined if empty, not ""
+        notes: data.notes || undefined, 
       };
 
       if (log) {
@@ -136,23 +131,15 @@ export function ProductionLogForm({ log, onSuccess }: ProductionLogFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Üretilen Ürün (Mamul)</FormLabel>
-              <Select onValueChange={(value) => { field.onChange(value); form.setValue("bomId", ""); }} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Mamul seçin" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {finishedProducts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{p.name}</span>
-                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProductCombobox
+                products={finishedProducts}
+                value={field.value}
+                onChange={(productId) => {
+                  field.onChange(productId);
+                  form.setValue("bomId", ""); // Reset BOM when product changes
+                }}
+                placeholder="Mamul seçin"
+              />
               <FormMessage />
             </FormItem>
           )}

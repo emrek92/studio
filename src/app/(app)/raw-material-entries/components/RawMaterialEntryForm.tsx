@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { tr } from "date-fns/locale";
+import { ProductCombobox } from "@/components/ProductCombobox";
 
 const NO_SUPPLIER_SELECTED_VALUE = "__no_supplier__";
 const NO_PURCHASE_ORDER_SELECTED_VALUE = "__no_purchase_order__";
@@ -176,27 +177,16 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           render={({ field }) => (
             <FormItem>
               <FormLabel>Hammadde/Yardımcı Malzeme</FormLabel>
-              <Select 
-                onValueChange={field.onChange} 
-                value={field.value}
-                disabled={!!entry} 
-              >
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Hammadde/Yardımcı Malzeme seçin" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {rawMaterials.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{p.name} ({p.unit})</span>
-                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <ProductCombobox
+                    products={rawMaterials}
+                    value={field.value}
+                    onChange={(productId) => {
+                        field.onChange(productId);
+                        form.setValue("purchaseOrderId", NO_PURCHASE_ORDER_SELECTED_VALUE);
+                    }}
+                    placeholder="Hammadde/Yardımcı Malzeme seçin"
+                    disabled={!!entry}
+                />
               {!!entry && <p className="text-xs text-muted-foreground">Ürün tipi giriş düzenlenirken değiştirilemez.</p>}
               <FormMessage />
             </FormItem>

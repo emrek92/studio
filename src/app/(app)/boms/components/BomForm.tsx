@@ -14,19 +14,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useStore, getProductNameById, getProductCodeById } from "@/lib/store";
 import type { BOM } from "@/types";
 import { DialogFooter, DialogHeader, DialogTitle, DialogDescription, DialogClose } from "@/components/ui/dialog";
 import { PlusCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { ProductCombobox } from "@/components/ProductCombobox";
 
 const bomComponentSchema = z.object({
   productId: z.string().min(1, "Bileşen seçilmelidir."),
@@ -111,23 +105,12 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Ana Ürün (Mamul)</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Mamul seçin" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {finishedProducts.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <div className="flex flex-col">
-                        <span className="font-medium text-sm">{p.name}</span>
-                        {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <ProductCombobox
+                products={finishedProducts}
+                value={field.value}
+                onChange={field.onChange}
+                placeholder="Mamul seçin"
+              />
               <FormMessage />
             </FormItem>
           )}
@@ -144,23 +127,12 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                   render={({ field: componentField }) => (
                     <FormItem>
                       <FormLabel>Bileşen Ürünü</FormLabel>
-                      <Select onValueChange={componentField.onChange} defaultValue={componentField.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Bileşen seçin" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {componentProducts.map((p) => (
-                            <SelectItem key={p.id} value={p.id}>
-                              <div className="flex flex-col">
-                                <span className="font-medium text-sm">{p.name} ({p.unit})</span>
-                                {p.productCode && <span className="text-xs text-muted-foreground font-mono">{p.productCode}</span>}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                       <ProductCombobox
+                        products={componentProducts}
+                        value={componentField.value}
+                        onChange={componentField.onChange}
+                        placeholder="Bileşen seçin"
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -170,7 +142,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
                   name={`components.${index}.quantity`}
                   render={({ field: componentField }) => (
                     <FormItem>
-                      <FormLabel>Miktar</FormLabel>
+                      <FormLabel>Miktar ({getProductUnitById(form.getValues(`components.${index}.productId`)) || 'Birim'})</FormLabel>
                       <FormControl>
                         <Input type="number" placeholder="1" {...componentField} />
                       </FormControl>
@@ -192,7 +164,7 @@ export function BomForm({ bom, onSuccess }: BomFormProps) {
               )}
             </div>
           ))}
-           {form.formState.errors.components && typeof form.formState.errors.components !== 'string' && !form.formState.errors.components.length && (
+           {form.formState.errors.components && typeof form.formState.errors.components !== 'string' && !Array.isArray(form.formState.errors.components) && (
             <p className="text-sm font-medium text-destructive">{form.formState.errors.components.message}</p>
           )}
           <Button
