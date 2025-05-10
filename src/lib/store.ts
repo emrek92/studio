@@ -18,6 +18,7 @@ interface AppState {
   deleteProduct: (productId: string) => void;
   getProductById: (productId: string) => Product | undefined;
   getProductByCode: (productCode: string) => Product | undefined;
+  applyStockCount: (counts: Array<{ productId: string; quantity: number }>) => void;
   
   // BOM actions
   addBom: (bom: BOM) => void;
@@ -122,6 +123,14 @@ export const useStore = create<AppState>()(
       },
       getProductById: (productId) => get().products.find(p => p.id === productId),
       getProductByCode: (productCode) => get().products.find(p => p.productCode.toLowerCase() === productCode.toLowerCase()),
+      applyStockCount: (counts) => {
+        set((state) => ({
+          products: state.products.map(p => {
+            const countedItem = counts.find(c => c.productId === p.id);
+            return countedItem ? { ...p, stock: countedItem.quantity } : p;
+          })
+        }));
+      },
 
       // BOM actions
       addBom: (bomData) => {
