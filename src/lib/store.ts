@@ -1,12 +1,13 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent } from '@/types';
+import type { Product, BOM, RawMaterialEntry, ProductionLog, ProductType, BomComponent, CustomerOrder, OrderItem, OrderStatus } from '@/types';
 
 interface AppState {
   products: Product[];
   boms: BOM[];
   rawMaterialEntries: RawMaterialEntry[];
   productionLogs: ProductionLog[];
+  customerOrders: CustomerOrder[];
 
   // Product actions
   addProduct: (product: Product) => void;
@@ -23,13 +24,19 @@ interface AppState {
 
   // Raw Material Entry actions
   addRawMaterialEntry: (entry: RawMaterialEntry) => void;
-  // updateRawMaterialEntry: (entry: RawMaterialEntry) => void; // Future enhancement
-  // deleteRawMaterialEntry: (entryId: string) => void; // Future enhancement
+  updateRawMaterialEntry: (updatedEntry: RawMaterialEntry) => void;
+  deleteRawMaterialEntry: (entryId: string) => void;
 
   // Production Log actions
   addProductionLog: (log: ProductionLog) => void;
   updateProductionLog: (log: ProductionLog) => void; 
   deleteProductionLog: (logId: string) => void; 
+
+  // Customer Order actions
+  addCustomerOrder: (order: CustomerOrder) => void;
+  updateCustomerOrder: (updatedOrder: CustomerOrder) => void;
+  deleteCustomerOrder: (orderId: string) => void;
+  getCustomerOrderById: (orderId: string) => CustomerOrder | undefined;
 }
 
 export const useStore = create<AppState>()(
@@ -39,6 +46,7 @@ export const useStore = create<AppState>()(
       boms: [],
       rawMaterialEntries: [],
       productionLogs: [],
+      customerOrders: [],
 
       // Product actions
       addProduct: (product) => {
@@ -81,6 +89,45 @@ export const useStore = create<AppState>()(
           ),
         }));
       },
+      updateRawMaterialEntry: (updatedEntry) => {
+        const oldEntry = get().rawMaterialEntries.find(e => e.id === updatedEntry.id);
+        if (!oldEntry) {
+          throw new Error("Güncellenecek hammadde girişi bulunamadı.");
+        }
+        // Assuming productId does not change during an update for simplicity.
+        // If it could, logic here would be more complex involving two products.
+        if (oldEntry.productId !== updatedEntry.productId) {
+            // This case should ideally be handled by deleting old and adding new if product changes.
+            // For now, let's assume product ID remains same during an update.
+            // If product ID can change, we'd need to:
+            // 1. Add oldEntry.quantity back to oldEntry.productId
+            // 2. Subtract updatedEntry.quantity from updatedEntry.productId
+            throw new Error("Hammadde girişi güncellenirken ürün ID'si değiştirilemez. Lütfen mevcut kaydı silip yeni bir kayıt oluşturun.");
+        }
+
+        const stockAdjustment = updatedEntry.quantity - oldEntry.quantity;
+        set((state) => ({
+          rawMaterialEntries: state.rawMaterialEntries.map((e) =>
+            e.id === updatedEntry.id ? updatedEntry : e
+          ),
+          products: state.products.map((p) =>
+            p.id === updatedEntry.productId ? { ...p, stock: p.stock + stockAdjustment } : p
+          ),
+        }));
+      },
+      deleteRawMaterialEntry: (entryId) => {
+        const entryToDelete = get().rawMaterialEntries.find(e => e.id === entryId);
+        if (!entryToDelete) {
+          throw new Error("Silinecek hammadde girişi bulunamadı.");
+        }
+        const stockAdjustment = -entryToDelete.quantity; // Add back to stock
+        set((state) => ({
+          rawMaterialEntries: state.rawMaterialEntries.filter((e) => e.id !== entryId),
+          products: state.products.map((p) =>
+            p.id === entryToDelete.productId ? { ...p, stock: p.stock + stockAdjustment } : p
+          ),
+        }));
+      },
 
       // Production Log actions
       addProductionLog: (log) => {
@@ -100,7 +147,7 @@ export const useStore = create<AppState>()(
           const product = productsToUpdate.find(p => p.id === component.productId);
           if (!product || product.stock < component.quantity * log.quantity) {
             possible = false;
-            insufficientComponentName = product ? product.name : `ID: ${component.productId}`;
+            insufficientComponentName = product ? `${product.productCode} - ${product.name}` : `ID: ${component.productId}`;
           }
           return {
             productId: component.productId,
@@ -171,7 +218,7 @@ export const useStore = create<AppState>()(
           const product = tempProducts.find(p => p.id === comp.productId);
           if (!product || product.stock < comp.quantity * updatedLog.quantity) {
             possible = false;
-            insufficientComponentName = product ? product.name : `ID: ${comp.productId}`;
+            insufficientComponentName = product ? `${product.productCode} - ${product.name}` : `ID: ${comp.productId}`;
           }
         });
 
@@ -237,6 +284,27 @@ export const useStore = create<AppState>()(
           productionLogs: productionLogs.filter(l => l.id !== logId),
         });
       },
+
+      // Customer Order Actions
+      addCustomerOrder: (order) => {
+        // For now, orders do not directly impact stock. This could be a future enhancement.
+        // Consider if orderReference should be unique.
+        const existingOrder = get().customerOrders.find(co => co.orderReference.toLowerCase() === order.orderReference.toLowerCase());
+        if (existingOrder) {
+            throw new Error(`'${order.orderReference}' referans numaralı sipariş zaten mevcut.`);
+        }
+        set((state) => ({ customerOrders: [...state.customerOrders, order] }));
+      },
+      updateCustomerOrder: (updatedOrder) =>
+        set((state) => ({
+          customerOrders: state.customerOrders.map((o) => (o.id === updatedOrder.id ? updatedOrder : o)),
+        })),
+      deleteCustomerOrder: (orderId) =>
+        set((state) => ({
+          customerOrders: state.customerOrders.filter((o) => o.id !== orderId),
+        })),
+      getCustomerOrderById: (orderId) => get().customerOrders.find(o => o.id === orderId),
+
     }),
     {
       name: 'stoktakip-storage', 
@@ -261,3 +329,8 @@ export const getProductCodeById = (productId: string): string | undefined => {
     const product = useStore.getState().products.find(p => p.id === productId);
     return product?.productCode;
 };
+
+export const getProductUnitById = (productId: string): string | undefined => {
+    const product = useStore.getState().products.find(p => p.id === productId);
+    return product?.unit;
+}

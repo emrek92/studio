@@ -49,7 +49,7 @@ interface RawMaterialEntryFormProps {
 }
 
 export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormProps) {
-  const { products, addRawMaterialEntry } = useStore();
+  const { products, addRawMaterialEntry, updateRawMaterialEntry } = useStore();
   const { toast } = useToast();
 
   const rawMaterials = products.filter(p => p.type === 'hammadde' || p.type === 'yardimci_malzeme');
@@ -57,7 +57,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
   const form = useForm<RawMaterialEntryFormValues>({
     resolver: zodResolver(rawMaterialEntryFormSchema),
     defaultValues: entry
-      ? { ...entry, date: new Date(entry.date) }
+      ? { ...entry, date: new Date(entry.date), supplier: entry.supplier || "", notes: entry.notes || "" }
       : {
           productId: "",
           quantity: 0,
@@ -69,22 +69,27 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
 
   function onSubmit(data: RawMaterialEntryFormValues) {
     try {
+      const entryDataWithISOStringDate = {
+        ...data,
+        date: data.date.toISOString(),
+        notes: data.notes || undefined, 
+        supplier: data.supplier || undefined,
+      };
+
       if (entry) {
-        // Update logic (future enhancement)
-        // updateRawMaterialEntry({ ...entry, ...data, date: data.date.toISOString() });
-        toast({ title: "Giriş Güncellendi", description: `Giriş başarıyla güncellendi.` });
+        updateRawMaterialEntry({ ...entry, ...entryDataWithISOStringDate });
+        toast({ title: "Hammadde Girişi Güncellendi", description: `Giriş başarıyla güncellendi.` });
       } else {
         const newEntry: RawMaterialEntry = {
           id: crypto.randomUUID(),
-          ...data,
-          date: data.date.toISOString(),
+          ...entryDataWithISOStringDate,
         };
         addRawMaterialEntry(newEntry);
         toast({ title: "Hammadde Girişi Eklendi", description: `Yeni hammadde girişi başarıyla eklendi.` });
       }
       onSuccess();
-    } catch (error) {
-       toast({ title: "Hata", description: "İşlem sırasında bir hata oluştu.", variant: "destructive" });
+    } catch (error: any) {
+       toast({ title: "Hata", description: error.message || "İşlem sırasında bir hata oluştu.", variant: "destructive" });
       console.error(error);
     }
   }
@@ -93,7 +98,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <DialogHeader>
-          <DialogTitle>{entry ? "Girişi Düzenle" : "Yeni Hammadde Girişi"}</DialogTitle>
+          <DialogTitle>{entry ? "Hammadde Girişini Düzenle" : "Yeni Hammadde Girişi"}</DialogTitle>
           <DialogDescription>
             {entry ? `Giriş bilgilerini değiştirin.` : "Yeni hammadde girişi için bilgileri girin."}
           </DialogDescription>
@@ -105,7 +110,11 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
           render={({ field }) => (
             <FormItem>
               <FormLabel>Hammadde/Yardımcı Malzeme</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select 
+                onValueChange={field.onChange} 
+                defaultValue={field.value}
+                disabled={!!entry} // Disable product change when editing
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Hammadde/Yardımcı Malzeme seçin" />
@@ -122,6 +131,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                   ))}
                 </SelectContent>
               </Select>
+              {!!entry && <p className="text-xs text-muted-foreground">Ürün tipi giriş düzenlenirken değiştirilemez.</p>}
               <FormMessage />
             </FormItem>
           )}
@@ -173,6 +183,7 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
                     onSelect={field.onChange}
                     initialFocus
                     locale={tr}
+                    disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
                   />
                 </PopoverContent>
               </Popover>
@@ -219,4 +230,3 @@ export function RawMaterialEntryForm({ entry, onSuccess }: RawMaterialEntryFormP
     </Form>
   );
 }
-

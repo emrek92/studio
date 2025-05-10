@@ -2,7 +2,7 @@ export type ProductType = 'hammadde' | 'yari_mamul' | 'mamul' | 'yardimci_malzem
 
 export interface Product {
   id: string;
-  productCode: string; // Added product code
+  productCode: string; 
   name: string;
   type: ProductType;
   unit: string; // örn: kg, adet, litre, metre
@@ -23,8 +23,8 @@ export interface BOM {
 }
 
 export interface RawMaterialEntry {
-  id: string;
-  productId: string; // Hammadde ID'si
+  id:string;
+  productId: string; // Hammadde veya Yardımcı Malzeme ID'si
   quantity: number;
   date: string; // ISO tarih formatı
   supplier?: string;
@@ -40,3 +40,21 @@ export interface ProductionLog {
   notes?: string;
 }
 
+export interface OrderItem {
+  productId: string; // Mamul ID'si
+  quantity: number;
+  unitPrice: number; // Birim Fiyat
+}
+
+export type OrderStatus = 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+
+export interface CustomerOrder {
+  id: string;
+  orderReference: string; // Sipariş referans numarası (belki kullanıcı tanımlı veya otomatik)
+  customerName: string;
+  orderDate: string; // ISO tarih formatı
+  items: OrderItem[];
+  totalAmount: number; // Otomatik hesaplanacak: sum(item.quantity * item.unitPrice)
+  status: OrderStatus;
+  notes?: string;
+}

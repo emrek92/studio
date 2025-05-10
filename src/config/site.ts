@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { LayoutDashboard, Package, ListChecks, Truck, Factory, Warehouse, Settings } from "lucide-react";
+import { LayoutDashboard, Package, ListChecks, Truck, Factory, Warehouse, Settings, ShoppingCart } from "lucide-react";
 
 export interface NavItem {
   title: string;
@@ -37,6 +37,12 @@ export const siteConfig = {
         { title: "Üretim Kaydı", href: "/productions", icon: Factory },
       ],
     },
+    {
+      title: "Satış",
+      items: [
+        { title: "Müşteri Siparişleri", href: "/customer-orders", icon: ShoppingCart },
+      ]
+    }
     // {
     //   title: "Ayarlar",
     //   items: [

@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -8,7 +9,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { RawMaterialEntryForm } from "./components/RawMaterialEntryForm";
-import { rawMaterialEntryColumns } from "./components/RawMaterialEntryColumns";
+import { getRawMaterialEntryColumns } from "./components/RawMaterialEntryColumns";
 import { useStore } from "@/lib/store";
 import type { RawMaterialEntry, Product } from "@/types";
 import { DataTable } from "@/components/DataTable";
@@ -17,11 +18,23 @@ import { ExcelImportDialog } from "@/components/ExcelImportDialog";
 import { downloadExcelTemplate, parseExcelFile, findProductByCode } from "@/lib/excelUtils";
 import { useToast } from "@/hooks/use-toast";
 import * as z from "zod";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function RawMaterialEntriesPage() {
-  const { rawMaterialEntries, products, addRawMaterialEntry } = useStore();
+  const { rawMaterialEntries, products, addRawMaterialEntry, deleteRawMaterialEntry } = useStore();
   const [isMounted, setIsMounted] = React.useState(false);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editingEntry, setEditingEntry] = React.useState<RawMaterialEntry | undefined>(undefined);
+  const [entryToDelete, setEntryToDelete] = React.useState<string | null>(null);
   const [isImportModalOpen, setIsImportModalOpen] = React.useState(false);
   const { toast } = useToast();
 
@@ -29,7 +42,29 @@ export default function RawMaterialEntriesPage() {
     setIsMounted(true);
   }, []);
 
-  const columns = rawMaterialEntryColumns;
+  const handleEdit = (entry: RawMaterialEntry) => {
+    setEditingEntry(entry);
+    setIsFormOpen(true);
+  };
+
+  const handleDeleteConfirm = (entryId: string) => {
+    setEntryToDelete(entryId);
+  };
+
+  const handleDelete = () => {
+    if (entryToDelete) {
+      try {
+        deleteRawMaterialEntry(entryToDelete);
+        toast({ title: "Hammadde Girişi Silindi", description: "Giriş başarıyla silindi." });
+      } catch (error: any) {
+         toast({ title: "Silme Hatası", description: error.message || "Giriş silinirken bir hata oluştu.", variant: "destructive" });
+      }
+      setEntryToDelete(null);
+    }
+  };
+  
+  const columns = React.useMemo(() => getRawMaterialEntryColumns({ onEdit: handleEdit, onDelete: handleDeleteConfirm }), [handleEdit, handleDeleteConfirm]);
+
 
   const generateRawMaterialEntryTemplate = () => {
     const headers = ["Hammadde/Yardımcı Malzeme Kodu*", "Hammadde/Yardımcı Malzeme Adı - Bilgilendirme", "Miktar*", "Tarih (GG.AA.YYYY)*", "Tedarikçi", "Notlar"];
@@ -62,7 +97,7 @@ export default function RawMaterialEntriesPage() {
 
       const importSchema = z.object({
         "Hammadde/Yardımcı Malzeme Kodu*": z.string().min(1, "Hammadde ürün kodu zorunludur."),
-        "Miktar*": z.preprocess(val => Number(val), z.number().positive("Miktar pozitif olmalıdır.")),
+        "Miktar*": z.preprocess(val => Number(val), z.number({invalid_type_error: "Miktar sayı olmalıdır."}).positive("Miktar pozitif olmalıdır.")),
         "Tarih (GG.AA.YYYY)*": z.date({ errorMap: () => ({ message: "Geçerli bir tarih girilmelidir."}) }),
         "Tedarikçi": z.string().optional().nullable(),
         "Notlar": z.string().optional().nullable(),
@@ -80,17 +115,21 @@ export default function RawMaterialEntriesPage() {
             errorCount++;
             continue;
           }
-
-          const newEntry: RawMaterialEntry = {
-            id: crypto.randomUUID(),
-            productId: product.id,
-            quantity: data["Miktar*"],
-            date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
-            supplier: data["Tedarikçi"] || undefined,
-            notes: data["Notlar"] || undefined,
-          };
-          addRawMaterialEntry(newEntry);
-          successCount++;
+          try {
+            const newEntry: RawMaterialEntry = {
+              id: crypto.randomUUID(),
+              productId: product.id,
+              quantity: data["Miktar*"],
+              date: data["Tarih (GG.AA.YYYY)*"].toISOString(),
+              supplier: data["Tedarikçi"] || undefined,
+              notes: data["Notlar"] || undefined,
+            };
+            addRawMaterialEntry(newEntry);
+            successCount++;
+          } catch (e:any) {
+             errorMessages.push(`Satır ${sheet.indexOf(row) + 2}: '${productCode}' için giriş eklenirken hata: ${e.message}`);
+             errorCount++;
+          }
         } else {
           errorCount++;
           const errors = validationResult.error.errors.map(e => `${e.path.join(".")}: ${e.message}`).join(", ");
@@ -100,12 +139,12 @@ export default function RawMaterialEntriesPage() {
 
       let description = `${successCount} hammadde girişi başarıyla içe aktarıldı.`;
       if (errorCount > 0) {
-        description += ` ${errorCount} girişte hata oluştu.`;
+        description += ` ${errorCount} girişte hata oluştu veya atlandı.`;
         console.error("İçe aktarma hataları:", errorMessages.join("\n"));
          toast({
-            title: "Kısmi İçe Aktarma Tamamlandı",
+            title: successCount > 0 && errorCount > 0 ? "Kısmi İçe Aktarma Tamamlandı" : "İçe Aktarma Tamamlanamadı",
             description: `${description}\nDetaylar için konsolu kontrol edin.`,
-            variant: "default",
+            variant: successCount === 0 && errorCount > 0 ? "destructive" : "default",
             duration: 10000,
          });
       } else {
@@ -130,7 +169,10 @@ export default function RawMaterialEntriesPage() {
           <Button onClick={() => setIsImportModalOpen(true)} variant="outline">
             <UploadCloud className="mr-2 h-4 w-4" /> Excel'den İçe Aktar
           </Button>
-          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+          <Dialog open={isFormOpen} onOpenChange={(isOpen) => {
+              setIsFormOpen(isOpen);
+              if (!isOpen) setEditingEntry(undefined);
+          }}>
             <DialogTrigger asChild>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" /> Yeni Giriş Ekle
@@ -138,8 +180,10 @@ export default function RawMaterialEntriesPage() {
             </DialogTrigger>
             <DialogContent className="sm:max-w-md">
               <RawMaterialEntryForm
+                entry={editingEntry}
                 onSuccess={() => {
                   setIsFormOpen(false);
+                  setEditingEntry(undefined);
                 }}
               />
             </DialogContent>
@@ -147,6 +191,26 @@ export default function RawMaterialEntriesPage() {
         </div>
       </div>
       <DataTable columns={columns} data={rawMaterialEntries.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())} />
+      
+      {entryToDelete && (
+        <AlertDialog open={!!entryToDelete} onOpenChange={() => setEntryToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Hammadde Girişini Silmek İstediğinize Emin Misiniz?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Bu işlem geri alınamaz. Bu hammadde girişi silinecek ve stok miktarı güncellenecektir.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setEntryToDelete(null)}>İptal Et</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
+                Sil
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+      
       <ExcelImportDialog
         open={isImportModalOpen}
         onOpenChange={setIsImportModalOpen}
